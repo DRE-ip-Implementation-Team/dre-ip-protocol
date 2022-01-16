@@ -19,10 +19,12 @@ impl Serializable for Signature {
 }
 
 impl Serializable for ProjectivePoint {
+    /// Encode as SEC1 format.
     fn to_bytes(&self) -> Box<[u8]> {
         self.to_encoded_point(true).to_bytes()
     }
 
+    /// Decode from SEC1 format.
     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
         let ep = EncodedPoint::from_bytes(bytes).ok()?;
         let pp = ProjectivePoint::from_encoded_point(&ep);
@@ -31,6 +33,13 @@ impl Serializable for ProjectivePoint {
         } else {
             None
         }
+    }
+}
+
+impl DREipPoint for ProjectivePoint {
+    /// Encode as SEC1 format.
+    fn to_bigint(&self) -> BigUint {
+        BigUint::from_bytes_be(&self.to_bytes())
     }
 }
 
@@ -45,6 +54,10 @@ impl DREipScalar for Scalar {
 
     fn to_bigint(&self) -> BigUint {
         BigUint::from_bytes_be(self.to_bytes().as_ref())
+    }
+
+    fn add(&self, other: &Self) -> Self {
+        self + other
     }
 }
 
@@ -67,10 +80,12 @@ impl DREipPrivateKey for SigningKey {
 }
 
 impl Serializable for VerifyingKey {
+    /// Encode as SEC1 format.
     fn to_bytes(&self) -> Box<[u8]> {
         self.to_encoded_point(true).to_bytes()
     }
 
+    /// Decode from SEC1 format.
     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
         EncodedPoint::from_bytes(bytes)
             .ok()
@@ -125,7 +140,7 @@ impl DREipGroup for NistP256 {
         (private_key, public_key)
     }
 
-    fn generate(gen: Self::Point, scalar: Self::Scalar) -> Self::Point {
+    fn generate(gen: &Self::Point, scalar: &Self::Scalar) -> Self::Point {
         gen * scalar
     }
 }
@@ -174,6 +189,17 @@ mod tests {
         let x = ProjectivePoint::random(rand::thread_rng());
         let serialized = <ProjectivePoint as Serializable>::to_bytes(&x);
         let y = <ProjectivePoint as Serializable>::from_bytes(&serialized).unwrap();
+        assert_eq!(x, y);
+    }
+
+    #[test]
+    fn test_point_to_bigint() {
+        let mut encoded = vec![0; 33];  // SEC1 encoding.
+        encoded[0] = 02;
+        encoded[32] = 255;
+        let point_x = <ProjectivePoint as Serializable>::from_bytes(&encoded).unwrap();
+        let x = BigUint::from_bytes_be(&encoded);
+        let y = point_x.to_bigint();
         assert_eq!(x, y);
     }
 

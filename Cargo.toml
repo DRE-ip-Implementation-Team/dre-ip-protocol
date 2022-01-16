@@ -11,12 +11,11 @@ p256_impl = ["sha2", "p256"]
 
 [dependencies.num-bigint]
 version = "0.4.3"
-features = ["serde"]
 
 [dependencies.p256]
 version = "0.10.0"
 optional = true
-features = ["arithmetic", "ecdsa-core", "ecdsa", "serde"]
+features = ["arithmetic", "ecdsa-core", "ecdsa"]
 
 [dependencies.rand]
 version = "0.8.4"
