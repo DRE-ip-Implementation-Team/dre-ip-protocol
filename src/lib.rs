@@ -8,8 +8,37 @@ pub mod groups;
 
 use crate::groups::{DreipGroup, DreipPoint, DreipScalar, Serializable};
 
-/// TODO
-pub struct Pwf;
+/// Zero-Knowledge Proof of well-formedness that a vote has `v` in `{0, 1}`.
+pub struct VoteProof {
+    pub d1: BigUint,
+    pub d2: BigUint,
+    pub r1: BigUint,
+    pub r2: BigUint,
+}
+
+impl VoteProof {
+    /// Create a new ZKPWF.
+    #[allow(non_snake_case)]
+    pub fn new<G: DreipGroup>(election: Election<G>, v: BigUint, r: BigUint,
+                              Z: BigUint, R: BigUint, ballot_id: impl AsRef<[u8]>,
+                              candidate_id: impl AsRef<[u8]>) -> Self {
+        todo!()
+    }
+}
+
+/// Proof of well-formedness that a ballot has exactly one positive vote.
+pub struct BallotProof {
+    pub a: BigUint,
+    pub b: BigUint,
+    pub t: BigUint,
+}
+
+impl BallotProof {
+    pub fn new<G: DreipGroup>(election: Election<G>, r_sum: BigUint,
+                              ballot_id: impl AsRef<[u8]>) -> Self {
+        todo!()
+    }
+}
 
 /// A single vote, representing a yes/no value for a single candidate.
 #[allow(non_snake_case)]
@@ -23,7 +52,7 @@ pub struct Vote {
     /// The Z value (g1^(r+v)).
     pub Z: BigUint,
     /// The proof of well-formedness that guarantees `v` was in `{0, 1}` when calculating `Z`.
-    pub pwf: Pwf,
+    pub pwf: VoteProof,
 }
 
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
@@ -32,7 +61,7 @@ pub struct Ballot<K> {
     /// Map from candidate IDs to individual votes.
     pub votes: HashMap<K, Vote>,
     /// The proof of well-formedness that guarantees exactly one of the `votes` represents yes.
-    pub pwf: Pwf,
+    pub pwf: BallotProof,
     /// The signature of the ballot, verifying authenticity and integrity.
     pub signature: Box<[u8]>,
 }
@@ -99,7 +128,7 @@ where for<'a> &'a G::Scalar:
             ensure_none(votes.insert(candidate, no_vote))?;
         }
         // TODO create PWF.
-        let pwf = Pwf;
+        let pwf = todo!();
 
         // TODO create signature.
         let signature = vec![].into_boxed_slice();
@@ -127,7 +156,7 @@ where for<'a> &'a G::Scalar:
         let Z = G::generate(&self.g1, &(&r + &v));
 
         // TODO create PWF.
-        let pwf = Pwf;
+        let pwf = todo!();
 
         Vote {
             r: r.to_bigint(),
