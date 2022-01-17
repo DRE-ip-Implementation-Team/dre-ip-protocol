@@ -55,10 +55,6 @@ impl DREipScalar for Scalar {
     fn to_bigint(&self) -> BigUint {
         BigUint::from_bytes_be(self.to_bytes().as_ref())
     }
-
-    fn add(&self, other: &Self) -> Self {
-        self + other
-    }
 }
 
 impl Serializable for SigningKey {

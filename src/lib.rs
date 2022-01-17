@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::ops::{Add, Mul, Sub};
 use num_bigint::BigUint;
 use rand::{CryptoRng, RngCore};
 
@@ -49,7 +50,12 @@ pub struct Election<G: DREipGroup> {
     public_key: G::PublicKey,
 }
 
-impl<G: DREipGroup> Election<G> {
+impl<G: DREipGroup> Election<G>
+where for<'a> &'a G::Scalar:
+    Add<Output = G::Scalar> +
+    Sub<Output = G::Scalar> +
+    Mul<Output = G::Scalar>
+{
     /// Create a new election.
     pub fn new(unique_bytes: impl AsRef<[u8]>, rng: impl RngCore + CryptoRng) -> Self {
         let (g1, g2) = G::new_generators(unique_bytes);
@@ -118,7 +124,7 @@ impl<G: DREipGroup> Election<G> {
         // Calculate public random R.
         let R = G::generate(&self.g2, &r);
         // Calculate public vote Z.
-        let Z = G::generate(&self.g1, &r.add(&v));
+        let Z = G::generate(&self.g1, &(&r + &v));
 
         // TODO create PWF.
         let pwf = PWF;

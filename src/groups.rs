@@ -27,8 +27,6 @@ pub trait DREipScalar {
     fn random(rng: impl RngCore + CryptoRng) -> Self;
     /// Convert a scalar back to an integer.
     fn to_bigint(&self) -> BigUint;
-    /// Add two scalars.
-    fn add(&self, other: &Self) -> Self;
 }
 
 /// A private key generated from a DRE-ip compatible group.
