@@ -6,10 +6,10 @@ use rand::{CryptoRng, RngCore};
 
 pub mod groups;
 
-use crate::groups::{DREipGroup, DREipPoint, DREipScalar, Serializable};
+use crate::groups::{DreipGroup, DreipPoint, DreipScalar, Serializable};
 
 /// TODO
-pub struct PWF;
+pub struct Pwf;
 
 /// A single vote, representing a yes/no value for a single candidate.
 #[allow(non_snake_case)]
@@ -23,7 +23,7 @@ pub struct Vote {
     /// The Z value (g1^(r+v)).
     pub Z: BigUint,
     /// The proof of well-formedness that guarantees `v` was in `{0, 1}` when calculating `Z`.
-    pub pwf: PWF,
+    pub pwf: Pwf,
 }
 
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
@@ -32,14 +32,14 @@ pub struct Ballot<K> {
     /// Map from candidate IDs to individual votes.
     pub votes: HashMap<K, Vote>,
     /// The proof of well-formedness that guarantees exactly one of the `votes` represents yes.
-    pub pwf: PWF,
+    pub pwf: Pwf,
     /// The signature of the ballot, verifying authenticity and integrity.
     pub signature: Box<[u8]>,
 }
 
 /// An election using the given group.
 #[derive(Debug)]
-pub struct Election<G: DREipGroup> {
+pub struct Election<G: DreipGroup> {
     /// First generator.
     g1: G::Point,
     /// Second generator.
@@ -50,7 +50,7 @@ pub struct Election<G: DREipGroup> {
     public_key: G::PublicKey,
 }
 
-impl<G: DREipGroup> Election<G>
+impl<G: DreipGroup> Election<G>
 where for<'a> &'a G::Scalar:
     Add<Output = G::Scalar> +
     Sub<Output = G::Scalar> +
@@ -69,17 +69,17 @@ where for<'a> &'a G::Scalar:
     }
 
     /// Get the first generator.
-    pub fn get_g1(&self) -> Box<[u8]> {
+    pub fn g1(&self) -> Box<[u8]> {
         self.g1.to_bytes()
     }
 
     /// Get the second generator.
-    pub fn get_g2(&self) -> Box<[u8]> {
+    pub fn g2(&self) -> Box<[u8]> {
         self.g2.to_bytes()
     }
 
     /// Get the public key.
-    pub fn get_public_key(&self) -> Box<[u8]> {
+    pub fn public_key(&self) -> Box<[u8]> {
         self.public_key.to_bytes()
     }
 
@@ -99,7 +99,7 @@ where for<'a> &'a G::Scalar:
             ensure_none(votes.insert(candidate, no_vote))?;
         }
         // TODO create PWF.
-        let pwf = PWF;
+        let pwf = Pwf;
 
         // TODO create signature.
         let signature = vec![].into_boxed_slice();
@@ -112,7 +112,7 @@ where for<'a> &'a G::Scalar:
     }
 
     #[allow(non_snake_case)]
-    fn create_vote<K>(&self, candidate: &K, yes: bool) -> Vote {
+    pub fn create_vote<K>(&self, candidate: &K, yes: bool) -> Vote {
         // Choose secret random r.
         let r = G::Scalar::random(rand::thread_rng());
         // Select secret vote v.
@@ -127,7 +127,7 @@ where for<'a> &'a G::Scalar:
         let Z = G::generate(&self.g1, &(&r + &v));
 
         // TODO create PWF.
-        let pwf = PWF;
+        let pwf = Pwf;
 
         Vote {
             r: r.to_bigint(),

@@ -36,14 +36,14 @@ impl Serializable for ProjectivePoint {
     }
 }
 
-impl DREipPoint for ProjectivePoint {
+impl DreipPoint for ProjectivePoint {
     /// Encode as SEC1 format.
     fn to_bigint(&self) -> BigUint {
         BigUint::from_bytes_be(&self.to_bytes())
     }
 }
 
-impl DREipScalar for Scalar {
+impl DreipScalar for Scalar {
     fn new(value: u64) -> Self {
         Scalar::from(value)
     }
@@ -67,7 +67,7 @@ impl Serializable for SigningKey {
     }
 }
 
-impl DREipPrivateKey for SigningKey {
+impl DreipPrivateKey for SigningKey {
     type Signature = Signature;
 
     fn sign(&self, msg: &[u8]) -> Self::Signature {
@@ -89,7 +89,7 @@ impl Serializable for VerifyingKey {
     }
 }
 
-impl DREipPublicKey for VerifyingKey {
+impl DreipPublicKey for VerifyingKey {
     type Signature = Signature;
 
     fn verify(&self, msg: &[u8], signature: &Self::Signature) -> bool {
@@ -97,7 +97,7 @@ impl DREipPublicKey for VerifyingKey {
     }
 }
 
-impl DREipGroup for NistP256 {
+impl DreipGroup for NistP256 {
     type Signature = Signature;
     type Point = ProjectivePoint;
     type Scalar = Scalar;
@@ -152,32 +152,32 @@ mod tests {
 
         // Sign and verify.
         let msg = b"This is a message.";
-        let signature = DREipPrivateKey::sign(&priv_key, msg);
-        assert!(DREipPublicKey::verify(&pub_key, msg, &signature));
+        let signature = DreipPrivateKey::sign(&priv_key, msg);
+        assert!(DreipPublicKey::verify(&pub_key, msg, &signature));
 
         // Serialize-deserialize and verify.
         let signature = <Signature as Serializable>::from_bytes(&signature.to_bytes()).unwrap();
-        assert!(DREipPublicKey::verify(&pub_key, msg, &signature));
+        assert!(DreipPublicKey::verify(&pub_key, msg, &signature));
 
         // Serialize-deserialize the keys and verify.
         let pub_key = VerifyingKey::from_bytes(&pub_key.to_bytes()).unwrap();
-        assert!(DREipPublicKey::verify(&pub_key, msg, &signature));
+        assert!(DreipPublicKey::verify(&pub_key, msg, &signature));
         let priv_key = SigningKey::from_bytes(&priv_key.to_bytes()).unwrap();
-        let signature = DREipPrivateKey::sign(&priv_key, msg);
-        assert!(DREipPublicKey::verify(&pub_key, msg, &signature));
+        let signature = DreipPrivateKey::sign(&priv_key, msg);
+        assert!(DreipPublicKey::verify(&pub_key, msg, &signature));
 
         // Message mismatch.
         let different_msg = b"This is a different message.";
-        assert!(!DREipPublicKey::verify(&pub_key, different_msg, &signature));
-        let different_sig = DREipPrivateKey::sign(&priv_key, different_msg);
+        assert!(!DreipPublicKey::verify(&pub_key, different_msg, &signature));
+        let different_sig = DreipPrivateKey::sign(&priv_key, different_msg);
         assert_ne!(signature, different_sig);
-        assert!(!DREipPublicKey::verify(&pub_key, msg, &different_sig));
+        assert!(!DreipPublicKey::verify(&pub_key, msg, &different_sig));
 
         // Key mismatch.
         let (new_priv, new_pub) = NistP256::new_keys(&mut rng);
-        assert!(!DREipPublicKey::verify(&new_pub, msg, &signature));
-        let new_sig = DREipPrivateKey::sign(&new_priv, msg);
-        assert!(!DREipPublicKey::verify(&pub_key, msg, &new_sig));
+        assert!(!DreipPublicKey::verify(&new_pub, msg, &signature));
+        let new_sig = DreipPrivateKey::sign(&new_priv, msg);
+        assert!(!DreipPublicKey::verify(&pub_key, msg, &new_sig));
     }
 
     #[test]

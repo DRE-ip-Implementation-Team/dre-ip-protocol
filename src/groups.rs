@@ -14,13 +14,13 @@ pub trait Serializable {
 }
 
 /// A point within a DRE-ip compatible group.
-pub trait DREipPoint : Serializable {
+pub trait DreipPoint: Serializable {
     /// Convert to an integer as per the SEC1 encoding.
     fn to_bigint(&self) -> BigUint;
 }
 
 /// A scalar within a DRE-ip compatible group.
-pub trait DREipScalar {
+pub trait DreipScalar {
     /// Create a scalar from the modulus of the given value.
     fn new(value: u64) -> Self;
     /// Create a securely random scalar.
@@ -30,7 +30,7 @@ pub trait DREipScalar {
 }
 
 /// A private key generated from a DRE-ip compatible group.
-pub trait DREipPrivateKey : Serializable {
+pub trait DreipPrivateKey: Serializable {
     /// The signature produced by signing with this key.
     type Signature;
 
@@ -39,7 +39,7 @@ pub trait DREipPrivateKey : Serializable {
 }
 
 /// A public key generated from a DRE-ip compatible group.
-pub trait DREipPublicKey : Serializable {
+pub trait DreipPublicKey: Serializable {
     /// The signature verified by this key.
     type Signature;
 
@@ -49,17 +49,17 @@ pub trait DREipPublicKey : Serializable {
 
 /// A DRE-ip compatible group (e.g. a DSA-like multiplicative cyclic group,
 /// or an ECDSA-like additive cyclic group).
-pub trait DREipGroup {
+pub trait DreipGroup {
     /// The signature produced by keys from this group.
     type Signature: Serializable;
     /// A point in this group.
-    type Point: DREipPoint;
+    type Point: DreipPoint;
     /// A scalar in this group.
-    type Scalar: DREipScalar;
+    type Scalar: DreipScalar;
     /// A private key in this group.
-    type PrivateKey: DREipPrivateKey<Signature = Self::Signature>;
+    type PrivateKey: DreipPrivateKey<Signature = Self::Signature>;
     /// A public key in this group.
-    type PublicKey: DREipPublicKey<Signature = Self::Signature>;
+    type PublicKey: DreipPublicKey<Signature = Self::Signature>;
 
     /// Create two new generators deterministically from the given bytes.
     /// For optimal security, `unique_bytes` should be never be re-used in another election.
