@@ -118,7 +118,7 @@ impl DreipGroup for NistP256 {
             // Turn this into a curve point. This might fail, or might successfully return the point at
             // infinity. Both of these are bad.
             let g2 = AffinePoint::decompress(&hash, Choice::from(0))
-                .map(|ap| ProjectivePoint::from(ap))
+                .map(ProjectivePoint::from)
                 .unwrap_or(ProjectivePoint::identity());
             // Ensure this isn't the point at infinity.
             // Also sanity check that we haven't accidentally produced g1.
