@@ -49,6 +49,10 @@ pub trait DreipPublicKey: Serializable {
 
 /// A DRE-ip compatible group (e.g. a DSA-like multiplicative cyclic group,
 /// or an ECDSA-like additive cyclic group).
+/// Note that in addition to satisfying all the constraints listed here,
+/// a useful implementation of this trait must also implement arithmetic
+/// on references to its `Point`s and `Scalar`s (see the trait constraints
+/// in `lib.rs`).
 pub trait DreipGroup {
     /// The signature produced by keys from this group.
     type Signature: Serializable;
@@ -69,8 +73,4 @@ pub trait DreipGroup {
 
     /// Randomly generate a public/private keypair.
     fn new_keys(rng: impl RngCore + CryptoRng) -> (Self::PrivateKey, Self::PublicKey);
-
-    /// Generate a new point from the given point and scalar. This corresponds to exponentiation
-    /// in a multiplicative group or multiplication in an additive group.
-    fn generate(gen: &Self::Point, scalar: &Self::Scalar) -> Self::Point;
 }

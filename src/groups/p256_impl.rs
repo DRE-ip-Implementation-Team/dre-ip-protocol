@@ -135,10 +135,6 @@ impl DreipGroup for NistP256 {
         let public_key = VerifyingKey::from(&private_key);
         (private_key, public_key)
     }
-
-    fn generate(gen: &Self::Point, scalar: &Self::Scalar) -> Self::Point {
-        gen * scalar
-    }
 }
 
 #[cfg(test)]
