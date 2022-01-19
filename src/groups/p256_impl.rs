@@ -1,9 +1,9 @@
 use super::*;
 
-use p256::{EncodedPoint, NistP256, ProjectivePoint, Scalar};
+use p256::{EncodedPoint, FieldBytes, NistP256, ProjectivePoint, Scalar};
 use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use p256::ecdsa::signature::{Signature as SignatureTrait, Signer, Verifier};
-use p256::elliptic_curve::Field;
+use p256::elliptic_curve::{Field, PrimeField};
 use p256::elliptic_curve::hash2curve::GroupDigest;
 use p256::elliptic_curve::hash2field::ExpandMsgXmd;
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
@@ -41,9 +41,8 @@ impl Serializable for ProjectivePoint {
 }
 
 impl DreipPoint for ProjectivePoint {
-    /// Encode as SEC1 format.
-    fn to_bigint(&self) -> BigUint {
-        BigUint::from_bytes_be(&self.to_bytes())
+    fn new(value: &BigUint) -> Option<Self> where Self: Sized {
+        ProjectivePoint::from_bytes(&value.to_bytes_be())
     }
 
     /// Create a point using SHA256, according to the hash_to_curve spec.
@@ -51,11 +50,25 @@ impl DreipPoint for ProjectivePoint {
         NistP256::hash_from_bytes::<ExpandMsgXmd<Sha256>>(data, DOMAIN_SEPARATION_TAG)
             .expect("Infallible")
     }
+
+    /// Encode as SEC1 format.
+    fn to_bigint(&self) -> BigUint {
+        BigUint::from_bytes_be(&self.to_bytes())
+    }
 }
 
 impl DreipScalar for Scalar {
-    fn new(value: u64) -> Self {
-        Scalar::from(value)
+    fn new(value: &BigUint) -> Option<Self> where Self: Sized {
+        let mut field_bytes = [0; 32];
+        let value_bytes = value.to_bytes_be();
+        if value_bytes.len() > field_bytes.len() {
+            return None;
+        }
+        let initial_i = field_bytes.len() - value_bytes.len();
+        for i in initial_i..field_bytes.len() {
+            field_bytes[i] = value_bytes[i - initial_i];
+        }
+        Scalar::from_repr(FieldBytes::from(field_bytes)).into()
     }
 
     fn random(rng: impl RngCore + CryptoRng) -> Self {
@@ -134,7 +147,9 @@ impl DreipGroup for NistP256 {
 mod tests {
     use super::*;
 
+    use num_bigint::RandomBits;
     use p256::elliptic_curve::Group;
+    use rand::distributions::Distribution;
 
     #[test]
     fn test_signing() {
@@ -192,9 +207,19 @@ mod tests {
 
     #[test]
     fn test_scalar_serialization() {
-        let x = Scalar::new(42);
-        let y = x.to_bigint();
-        assert_eq!(y, BigUint::from(42_u32));
+        // Try with a simple, small value.
+        const VAL: u32 = 42;
+        let x = BigUint::from(VAL);
+        let y = Scalar::new(&x).unwrap();
+        let z = y.to_bigint();
+        assert_eq!(x, z);
+
+        // Try with a random value.
+        let distribution = RandomBits::new(Scalar::NUM_BITS.into());
+        let x: BigUint = distribution.sample(&mut rand::thread_rng());
+        let y = Scalar::new(&x).unwrap();
+        let z = y.to_bigint();
+        assert_eq!(x, z);
     }
 
     #[test]

@@ -15,16 +15,18 @@ pub trait Serializable {
 
 /// A point within a DRE-ip compatible group.
 pub trait DreipPoint: Serializable {
-    /// Convert to an integer as per the SEC1 encoding.
-    fn to_bigint(&self) -> BigUint;
+    /// Create a point from the given value.
+    fn new(value: &BigUint) -> Option<Self> where Self: Sized;
     /// Create a random point deterministically from the given data via hashing.
     fn from_hash(data: &[&[u8]]) -> Self;
+    /// Convert to an integer as per the SEC1 encoding.
+    fn to_bigint(&self) -> BigUint;
 }
 
 /// A scalar within a DRE-ip compatible group.
 pub trait DreipScalar {
-    /// Create a scalar from the modulus of the given value.
-    fn new(value: u64) -> Self;
+    /// Create a scalar from the given value (which must be less than the scalar modulus).
+    fn new(value: &BigUint) -> Option<Self> where Self: Sized;
     /// Create a securely random scalar.
     fn random(rng: impl RngCore + CryptoRng) -> Self;
     /// Create a random scalar deterministically from the given data via hashing.
