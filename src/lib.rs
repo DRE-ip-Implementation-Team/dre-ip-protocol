@@ -38,7 +38,9 @@ impl VoteProof {
     /// 2. We calculate `a = g1 * rand` and `b = g2 * rand`.
     /// 3. We generate a challenge value `c`, and receive the sub-challenge `c' = c - fake_c`,
     ///    where `fake_c` is the pre-selected sub-challenge for the fake proof.
-    /// 4. We calculate our response as `r = rand - secret * c'`.
+    /// 4. We calculate our response as `r = rand - secret * c'`, where `secret` is the secret random
+    ///    value for this vote. Confusingly, this value is also referred to as `r`, so we call it
+    ///    `secret` in this explanation.
     /// 5. The observer can verify that `a = g1*r + Y*c'`, where `Y` is either `Z` or `Z - g1`
     ///    depending on whether we are trying to prove v=0 or v=1 respectively. This holds, as:
     /// ```equation
@@ -214,9 +216,63 @@ pub struct BallotProof {
 }
 
 impl BallotProof {
-    pub fn new<G: DreipGroup>(election: Election<G>, r_sum: BigUint,
-                              ballot_id: impl AsRef<[u8]>) -> Self {
-        todo!()
+    /// Create a new proof.
+    ///
+    /// This proof works on a similar principle to the genuine sub-proof within `VoteProof`.
+    /// It works as follows:
+    /// 1. We generate a random scalar `rand`.
+    /// 2. We calculate `a = g1 * rand` and `b = g2 * rand`.
+    /// 3. We generate a challenge value `c` which we cannot control due to the use of a hash function.
+    /// 4. We calculate our response as `r = rand + c * r_sum`, where `r_sum` is the sum of secret
+    ///    `r` values across all votes in this ballot.
+    /// 5. The observer can verify that `g1*r = a + X*c`, where `X = product(vote.Z)/g1` across all
+    ///    votes in this ballot; this holds, as:
+    /// ```equation
+    ///         TODO
+    /// ```
+    /// 6. The observer can verify that `g2*r = b + Y*c`, where `Y = product(vote.R)` across all
+    ///    votes in this ballot; this holds, as:
+    /// ```equation
+    ///         TODO
+    /// ```
+    ///
+    /// The ballot id is part of the hash input for the challenge, tying the proof to the ballot.
+    /// This requires that the ballot id is unique.
+    pub fn new<G: DreipGroup>(mut rng: impl RngCore + CryptoRng, election: Election<G>,
+                              r_sum: &G::Scalar, ballot_id: impl AsRef<[u8]>) -> Self
+    where
+        G: DreipGroup,
+        for<'a> &'a G::Point:
+            Add<Output = G::Point> +
+            Sub<Output = G::Point> +
+            Mul<&'a G::Scalar, Output = G::Point>,
+        for<'a> &'a G::Scalar:
+            Add<Output = G::Scalar> +
+            Sub<Output = G::Scalar> +
+            Mul<Output = G::Scalar>
+    {
+        // Get our generators.
+        let g1 = election.g1();
+        let g2 = election.g2();
+
+        // Generate the input for the challenge.
+        let random_scalar = G::Scalar::random(&mut rng);
+        let a = g1 * &random_scalar;
+        let b = g2 * &random_scalar;
+
+        // Get our non-interactive challenge via hashing.
+        let challenge = G::Scalar::from_hash(&[
+            &g1.to_bytes(), &g2.to_bytes(), &a.to_bytes(), &b.to_bytes(), ballot_id.as_ref(),
+        ]);
+
+        // Calculate the response.
+        let response = &random_scalar + &(&challenge * r_sum);
+
+        BallotProof {
+            a: a.to_bigint(),
+            b: b.to_bigint(),
+            t: response.to_bigint(),
+        }
     }
 }
 
