@@ -13,13 +13,13 @@ p256_impl = ["sha2", "p256"]
 version = "0.4.3"
 
 [dependencies.p256]
-version = "0.10.0"
+version = "0.10.1"
 optional = true
-features = ["arithmetic", "ecdsa-core", "ecdsa"]
+features = ["arithmetic", "ecdsa-core", "ecdsa", "hash2curve"]
 
 [dependencies.rand]
 version = "0.8.4"
 
 [dependencies.sha2]
-version = "0.10.1"
+version = "0.9.9"  # Must be compatible with the version used internally by p256.
 optional = true

@@ -1,12 +1,16 @@
 use super::*;
 
-use p256::{AffinePoint, EncodedPoint, NistP256, ProjectivePoint, Scalar};
+use p256::{EncodedPoint, NistP256, ProjectivePoint, Scalar};
 use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use p256::ecdsa::signature::{Signature as SignatureTrait, Signer, Verifier};
-use p256::elliptic_curve::{DecompressPoint, Field, Group};
+use p256::elliptic_curve::Field;
+use p256::elliptic_curve::hash2curve::GroupDigest;
+use p256::elliptic_curve::hash2field::ExpandMsgXmd;
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
-use p256::elliptic_curve::subtle::{Choice, ConstantTimeEq};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
+
+/// A tag to ensure random oracle uniqueness as per the hash_to_curve spec.
+const DOMAIN_SEPARATION_TAG: &[u8] = b"CURVE_XMD:SHA-256:DREIP";
 
 impl Serializable for Signature {
     fn to_bytes(&self) -> Box<[u8]> {
@@ -41,6 +45,12 @@ impl DreipPoint for ProjectivePoint {
     fn to_bigint(&self) -> BigUint {
         BigUint::from_bytes_be(&self.to_bytes())
     }
+
+    /// Create a point using SHA256, according to the hash_to_curve spec.
+    fn from_hash(data: &[&[u8]]) -> Self {
+        NistP256::hash_from_bytes::<ExpandMsgXmd<Sha256>>(data, DOMAIN_SEPARATION_TAG)
+            .expect("Infallible")
+    }
 }
 
 impl DreipScalar for Scalar {
@@ -50,6 +60,11 @@ impl DreipScalar for Scalar {
 
     fn random(rng: impl RngCore + CryptoRng) -> Self {
         <Scalar as Field>::random(rng)
+    }
+
+    fn from_hash(data: &[&[u8]]) -> Self {
+        NistP256::hash_to_scalar::<ExpandMsgXmd<Sha256>>(data, DOMAIN_SEPARATION_TAG)
+            .expect("Infallible")
     }
 
     fn to_bigint(&self) -> BigUint {
@@ -104,30 +119,8 @@ impl DreipGroup for NistP256 {
     type PrivateKey = SigningKey;
     type PublicKey = VerifyingKey;
 
-    fn new_generators(unique_bytes: impl AsRef<[u8]>) -> (Self::Point, Self::Point) {
-        // The first generator can be the standard one.
-        let g1 = ProjectivePoint::generator();
-
-        // The second generator must be randomly generated.
-        for i in 0..=u32::MAX {
-            // Generate a random x value.
-            let mut hasher: Sha256 = Sha256::new();
-            hasher.update(unique_bytes.as_ref());
-            hasher.update(&i.to_le_bytes());
-            let hash = hasher.finalize();
-            // Turn this into a curve point. This might fail, or might successfully return the point at
-            // infinity. Both of these are bad.
-            let g2 = AffinePoint::decompress(&hash, Choice::from(0))
-                .map(ProjectivePoint::from)
-                .unwrap_or(ProjectivePoint::identity());
-            // Ensure this isn't the point at infinity.
-            // Also sanity check that we haven't accidentally produced g1.
-            if (!g2.is_identity() & !g1.ct_eq(&g2)).into() {
-                return (g1, g2);
-            }
-            // Otherwise, try again with a different hash.
-        }
-        panic!("Tried four billion values and none worked!")
+    fn new_generators(unique_bytes: &[&[u8]]) -> (Self::Point, Self::Point) {
+        (ProjectivePoint::GENERATOR, ProjectivePoint::from_hash(unique_bytes))
     }
 
     fn new_keys(rng: impl RngCore + CryptoRng) -> (Self::PrivateKey, Self::PublicKey) {
@@ -140,6 +133,8 @@ impl DreipGroup for NistP256 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use p256::elliptic_curve::Group;
 
     #[test]
     fn test_signing() {
@@ -211,7 +206,7 @@ mod tests {
             there is no way that a bee should be able to fly.",
         ];
         for unique_str in unique_strings {
-            let (g1, g2) = NistP256::new_generators(unique_str);
+            let (g1, g2) = NistP256::new_generators(&[unique_str.as_bytes()]);
             assert_ne!(g1, g2);
             assert!(!bool::from(g1.is_identity()));
             assert!(!bool::from(g2.is_identity()));

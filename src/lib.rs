@@ -6,7 +6,7 @@ use rand::{CryptoRng, RngCore};
 
 pub mod groups;
 
-use crate::groups::{DreipGroup, DreipPoint, DreipScalar};
+use crate::groups::{DreipGroup, DreipPoint, DreipScalar, Serializable};
 
 /// Zero-Knowledge Proof of well-formedness that a vote has `v` in `{0, 1}`.
 pub struct VoteProof {
@@ -34,7 +34,7 @@ impl VoteProof {
     /// The sub-proofs work by TODO
     ///
     /// The ballot and candidate ids are hashed into the challenge, tying the
-    /// proof to the vote.
+    /// proof to the vote. This requires that the combination of the two is globally unique.
     ///
     /// This function does not check the validity of the generated proof, so if
     /// the supplied `v`, `r`, `Z`, and `R` values are invalid, an invalid
@@ -82,7 +82,12 @@ impl VoteProof {
         let fake_b = &(g2 * &fake_response) + &(R * &fake_challenge);
 
         // Get our non-interactive challenge via hashing.
-        let challenge = todo!();
+        let challenge = G::Scalar::from_hash(&[
+            &g1.to_bytes(), &g2.to_bytes(), &Z.to_bytes(), &R.to_bytes(),
+            &genuine_a.to_bytes(), &genuine_b.to_bytes(),
+            &fake_a.to_bytes(), &fake_b.to_bytes(),
+            ballot_id.as_ref(), candidate_id.as_ref(),
+        ]);
         // Split this into sub-challenges.
         let genuine_challenge = &challenge - &fake_challenge;
         // Calculate the genuine response.
@@ -174,7 +179,7 @@ impl<G> Election<G> where
         Mul<Output = G::Scalar>
 {
     /// Create a new election.
-    pub fn new(unique_bytes: impl AsRef<[u8]>, rng: impl RngCore + CryptoRng) -> Self {
+    pub fn new(unique_bytes: &[&[u8]], rng: impl RngCore + CryptoRng) -> Self {
         let (g1, g2) = G::new_generators(unique_bytes);
         let (private_key, public_key) = G::new_keys(rng);
         Self {
