@@ -7,7 +7,7 @@ use rand::{CryptoRng, RngCore};
 
 pub mod groups;
 
-use crate::groups::{DreipGroup, DreipPoint, DreipScalar, Serializable};
+use crate::groups::{DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, DreipScalar, Serializable};
 
 /// Zero-Knowledge Proof of well-formedness that a vote has `v` in `{0, 1}`.
 #[derive(Debug, Eq, PartialEq)]
@@ -203,6 +203,17 @@ impl VoteProof {
             None
         }
     }
+
+    /// Turn this proof into a byte sequence, suitable for signing.
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.c1.to_bytes_be());
+        bytes.extend(self.c2.to_bytes_be());
+        bytes.extend(self.r1.to_bytes_be());
+        bytes.extend(self.r2.to_bytes_be());
+
+        bytes.into_boxed_slice()
+    }
 }
 
 /// Proof of well-formedness that a ballot has exactly one positive vote.
@@ -331,6 +342,16 @@ impl BallotProof {
 
         Some(())
     }
+
+    /// Turn this proof into a byte sequence, suitable for signing.
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.a.to_bytes_be());
+        bytes.extend(self.b.to_bytes_be());
+        bytes.extend(self.r.to_bytes_be());
+
+        bytes.into_boxed_slice()
+    }
 }
 
 /// A single vote, representing a yes/no value for a single candidate.
@@ -366,6 +387,18 @@ impl Vote {
             Mul<Output = G::Scalar>
     {
         self.pwf.verify(election, &self.Z, &self.R, ballot_id, candidate_id).is_some()
+    }
+
+    /// Turn this vote into a byte sequence, suitable for signing.
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.r.to_bytes_be());
+        bytes.extend(self.v.to_bytes_be());
+        bytes.extend(self.R.to_bytes_be());
+        bytes.extend(self.Z.to_bytes_be());
+        bytes.extend_from_slice(&self.pwf.to_bytes());
+
+        bytes.into_boxed_slice()
     }
 }
 
@@ -427,8 +460,27 @@ impl<K> Ballot<K> {
             },
             None => return false,
         };
-        let ballot_valid = self.pwf.verify(election, &Z_sum, &R_sum, ballot_id);
-        ballot_valid.is_some()
+        let ballot_valid = self.pwf.verify(election, &Z_sum, &R_sum, &ballot_id);
+        if ballot_valid.is_none() {
+            return false;
+        }
+
+        // Verify signature
+        let mut expected_bytes = Vec::new();
+        expected_bytes.extend_from_slice(&election.g1().to_bytes());
+        expected_bytes.extend_from_slice(&election.g2().to_bytes());
+        expected_bytes.extend(ballot_id.as_ref());
+        for (candidate, vote) in self.votes.iter() {
+            expected_bytes.extend(candidate.as_ref());
+            expected_bytes.extend_from_slice(&vote.to_bytes());
+        }
+        expected_bytes.extend_from_slice(&self.pwf.to_bytes());
+        let signature = G::Signature::from_bytes(&self.signature);
+        if let Some(sig) = signature {
+            election.public_key().verify(&expected_bytes, &sig)
+        } else {
+            false
+        }
     }
 }
 
@@ -514,13 +566,22 @@ impl<G> Election<G> where
             .fold(zero, |a, b| &a + &b);
         let pwf = BallotProof::new(rng, self, &r_sum, &ballot_id);
 
-        // TODO create signature.
-        let signature = vec![].into_boxed_slice();
+        // Create signature.
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.g1.to_bytes());
+        bytes.extend_from_slice(&self.g2.to_bytes());
+        bytes.extend(ballot_id.as_ref());
+        for (candidate, vote) in votes.iter() {
+            bytes.extend(candidate.as_ref());
+            bytes.extend_from_slice(&vote.to_bytes());
+        }
+        bytes.extend_from_slice(&pwf.to_bytes());
+        let signature = self.private_key.sign(&bytes);
 
         Some(Ballot {
             votes,
             pwf,
-            signature,
+            signature: signature.to_bytes(),
         })
     }
 
@@ -601,5 +662,12 @@ mod tests {
         // Modify pwf and check it fails.
         ballot.pwf.r += BigUint::from(1u32);
         assert!(!ballot.verify(&election, "1"));
+
+        // Modify signature and check it fails.
+        let mut ballot = election.create_ballot(&mut rng, "2", "Bob",
+                                                vec!["Alice, Eve"]).unwrap();
+        assert!(ballot.verify(&election, "2"));
+        ballot.signature[0] += 1;
+        assert!(!ballot.verify(&election, "2"));
     }
 }
