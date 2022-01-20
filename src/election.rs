@@ -164,10 +164,21 @@ impl<G> Election<G> where
         Sub<Output = G::Scalar> +
         Mul<Output = G::Scalar>
 {
-    /// Create a new election.
+    /// Create a new election with random generators and keys.
     pub fn new(unique_bytes: &[&[u8]], rng: impl RngCore + CryptoRng) -> Self {
         let (g1, g2) = G::new_generators(unique_bytes);
         let (private_key, public_key) = G::new_keys(rng);
+        Self {
+            g1,
+            g2,
+            private_key,
+            public_key,
+        }
+    }
+
+    /// Create an election from its raw parts.
+    pub fn from_parts(g1: G::Point, g2: G::Point, private_key: G::PrivateKey,
+                      public_key: G::PublicKey) -> Self {
         Self {
             g1,
             g2,

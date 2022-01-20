@@ -48,7 +48,6 @@ fn example() {
 
 ## TODO
 * Finalise public interface - maybe expose group-specific types instead of raw bytes?
-* Add a way to construct an `Election` out of known values.
 
 [//]: # (links)
 [paper]: https://eprint.iacr.org/2016/670.pdf
