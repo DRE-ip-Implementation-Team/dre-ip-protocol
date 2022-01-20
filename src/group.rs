@@ -3,8 +3,6 @@ use rand::{CryptoRng, RngCore};
 /// Concrete implementation on the NIST P-256 elliptic curve.
 #[cfg(feature = "p256_impl")]
 mod p256_impl;
-#[cfg(feature = "p256_impl")]
-pub use p256;
 
 /// An object that can be serialized to/from a binary blob.
 pub trait Serializable {
