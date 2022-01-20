@@ -173,7 +173,7 @@ impl VoteProof {
         let g1 = election.g1();
         let g2 = election.g2();
 
-        // Reconstruct values from bigints.
+        // Reconstruct values from bytes.
         let Z = G::Point::from_bytes(Z)?;
         let R = G::Point::from_bytes(R)?;
         let c1 = G::Scalar::from_bytes(&self.c1)?;
@@ -318,7 +318,7 @@ impl BallotProof {
         let g1 = election.g1();
         let g2 = election.g2();
 
-        // Reconstruct values from bigints.
+        // Reconstruct values from bytes.
         let a = G::Point::from_bytes(&self.a)?;
         let b = G::Point::from_bytes(&self.b)?;
         let r = G::Scalar::from_bytes(&self.r)?;
