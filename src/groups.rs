@@ -8,7 +8,7 @@ pub use p256;
 
 /// An object that can be serialized to/from a binary blob.
 pub trait Serializable {
-    fn to_bytes(&self) -> Box<[u8]>;
+    fn to_bytes(&self) -> Vec<u8>;
     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
 }
 

@@ -13,8 +13,8 @@ use sha2::Sha256;
 const DOMAIN_SEPARATION_TAG: &[u8] = b"CURVE_XMD:SHA-256:DREIP";
 
 impl Serializable for Signature {
-    fn to_bytes(&self) -> Box<[u8]> {
-        self.as_bytes().to_vec().into_boxed_slice()
+    fn to_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
     }
 
     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
@@ -24,8 +24,8 @@ impl Serializable for Signature {
 
 impl Serializable for ProjectivePoint {
     /// Encode as SEC1 format.
-    fn to_bytes(&self) -> Box<[u8]> {
-        self.to_encoded_point(true).to_bytes()
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_encoded_point(true).as_bytes().to_vec()
     }
 
     /// Decode from SEC1 format.
@@ -53,8 +53,8 @@ impl DreipPoint for ProjectivePoint {
 }
 
 impl Serializable for Scalar {
-    fn to_bytes(&self) -> Box<[u8]> {
-        self.to_bytes().to_vec().into_boxed_slice()
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_bytes().to_vec()
     }
 
     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
@@ -82,8 +82,8 @@ impl DreipScalar for Scalar {
 }
 
 impl Serializable for SigningKey {
-    fn to_bytes(&self) -> Box<[u8]> {
-        SigningKey::to_bytes(self).to_vec().into_boxed_slice()
+    fn to_bytes(&self) -> Vec<u8> {
+        SigningKey::to_bytes(self).to_vec()
     }
 
     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
@@ -101,8 +101,8 @@ impl DreipPrivateKey for SigningKey {
 
 impl Serializable for VerifyingKey {
     /// Encode as SEC1 format.
-    fn to_bytes(&self) -> Box<[u8]> {
-        self.to_encoded_point(true).to_bytes()
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_encoded_point(true).as_bytes().to_vec()
     }
 
     /// Decode from SEC1 format.

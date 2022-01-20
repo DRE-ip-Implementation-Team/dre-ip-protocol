@@ -11,13 +11,13 @@ use crate::groups::{DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, Dre
 #[derive(Debug, Eq, PartialEq)]
 pub struct VoteProof {
     /// Challenge value one.
-    pub c1: Box<[u8]>,
+    pub c1: Vec<u8>,
     /// Challenge value two.
-    pub c2: Box<[u8]>,
+    pub c2: Vec<u8>,
     /// Response value one.
-    pub r1: Box<[u8]>,
+    pub r1: Vec<u8>,
     /// Response value two.
-    pub r2: Box<[u8]>,
+    pub r2: Vec<u8>,
 }
 
 impl VoteProof {
@@ -203,14 +203,14 @@ impl VoteProof {
     }
 
     /// Turn this proof into a byte sequence, suitable for signing.
-    pub fn to_bytes(&self) -> Box<[u8]> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&self.c1);
         bytes.extend_from_slice(&self.c2);
         bytes.extend_from_slice(&self.r1);
         bytes.extend_from_slice(&self.r2);
 
-        bytes.into_boxed_slice()
+        bytes
     }
 }
 
@@ -219,11 +219,11 @@ impl VoteProof {
 #[derive(Debug, Eq, PartialEq)]
 pub struct BallotProof {
     /// Proof value a.
-    pub a: Box<[u8]>,
+    pub a: Vec<u8>,
     /// Proof value b.
-    pub b: Box<[u8]>,
+    pub b: Vec<u8>,
     /// Response value.
-    pub r: Box<[u8]>,
+    pub r: Vec<u8>,
 }
 
 impl BallotProof {
@@ -343,13 +343,13 @@ impl BallotProof {
     }
 
     /// Turn this proof into a byte sequence, suitable for signing.
-    pub fn to_bytes(&self) -> Box<[u8]> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&self.a);
         bytes.extend_from_slice(&self.b);
         bytes.extend_from_slice(&self.r);
 
-        bytes.into_boxed_slice()
+        bytes
     }
 }
 
@@ -358,13 +358,13 @@ impl BallotProof {
 #[derive(Debug, Eq, PartialEq)]
 pub struct Vote {
     /// The secret random value.
-    pub r: Box<[u8]>,
+    pub r: Vec<u8>,
     /// The secret vote value: 1 for yes or 0 for no.
-    pub v: Box<[u8]>,
+    pub v: Vec<u8>,
     /// The public R value (g2^r).
-    pub R: Box<[u8]>,
+    pub R: Vec<u8>,
     /// The public Z value (g1^(r+v)).
-    pub Z: Box<[u8]>,
+    pub Z: Vec<u8>,
     /// The proof of well-formedness that guarantees `R` and `Z` were calculated correctly.
     pub pwf: VoteProof,
 }
@@ -389,7 +389,7 @@ impl Vote {
     }
 
     /// Turn this vote into a byte sequence, suitable for signing.
-    pub fn to_bytes(&self) -> Box<[u8]> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&self.r);
         bytes.extend_from_slice(&self.v);
@@ -397,7 +397,7 @@ impl Vote {
         bytes.extend_from_slice(&self.Z);
         bytes.extend_from_slice(&self.pwf.to_bytes());
 
-        bytes.into_boxed_slice()
+        bytes
     }
 }
 
@@ -410,7 +410,7 @@ pub struct Ballot<K> {
     /// The proof of well-formedness that guarantees exactly one of the `votes` represents yes.
     pub pwf: BallotProof,
     /// The signature of the ballot, verifying authenticity and integrity.
-    pub signature: Box<[u8]>,
+    pub signature: Vec<u8>,
 }
 
 impl<K> Ballot<K> {
