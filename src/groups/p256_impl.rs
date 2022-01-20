@@ -41,8 +41,8 @@ impl Serializable for ProjectivePoint {
 }
 
 impl DreipPoint for ProjectivePoint {
-    fn new(value: &BigUint) -> Option<Self> where Self: Sized {
-        ProjectivePoint::from_bytes(&value.to_bytes_be())
+    fn identity() -> Self {
+        ProjectivePoint::IDENTITY
     }
 
     /// Create a point using SHA256, according to the hash_to_curve spec.
@@ -50,25 +50,25 @@ impl DreipPoint for ProjectivePoint {
         NistP256::hash_from_bytes::<ExpandMsgXmd<Sha256>>(data, DOMAIN_SEPARATION_TAG)
             .expect("Infallible")
     }
+}
 
-    /// Encode as SEC1 format.
-    fn to_bigint(&self) -> BigUint {
-        BigUint::from_bytes_be(&self.to_bytes())
+impl Serializable for Scalar {
+    fn to_bytes(&self) -> Box<[u8]> {
+        self.to_bytes().to_vec().into_boxed_slice()
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+        Scalar::from_repr(FieldBytes::from_exact_iter(bytes.iter().cloned())?).into()
     }
 }
 
 impl DreipScalar for Scalar {
-    fn new(value: &BigUint) -> Option<Self> where Self: Sized {
-        let mut field_bytes = [0; 32];
-        let value_bytes = value.to_bytes_be();
-        if value_bytes.len() > field_bytes.len() {
-            return None;
-        }
-        let initial_i = field_bytes.len() - value_bytes.len();
-        for i in initial_i..field_bytes.len() {
-            field_bytes[i] = value_bytes[i - initial_i];
-        }
-        Scalar::from_repr(FieldBytes::from(field_bytes)).into()
+    fn zero() -> Self {
+        <Scalar as Field>::zero()
+    }
+
+    fn one() -> Self {
+        <Scalar as Field>::one()
     }
 
     fn random(rng: impl RngCore + CryptoRng) -> Self {
@@ -78,10 +78,6 @@ impl DreipScalar for Scalar {
     fn from_hash(data: &[&[u8]]) -> Self {
         NistP256::hash_to_scalar::<ExpandMsgXmd<Sha256>>(data, DOMAIN_SEPARATION_TAG)
             .expect("Infallible")
-    }
-
-    fn to_bigint(&self) -> BigUint {
-        BigUint::from_bytes_be(self.to_bytes().as_ref())
     }
 }
 
@@ -147,9 +143,7 @@ impl DreipGroup for NistP256 {
 mod tests {
     use super::*;
 
-    use num_bigint::RandomBits;
     use p256::elliptic_curve::Group;
-    use rand::distributions::Distribution;
 
     #[test]
     fn test_signing() {
@@ -162,7 +156,7 @@ mod tests {
         assert!(DreipPublicKey::verify(&pub_key, msg, &signature));
 
         // Serialize-deserialize and verify.
-        let signature = <Signature as Serializable>::from_bytes(&signature.to_bytes()).unwrap();
+        let signature = Serializable::from_bytes(&signature.to_bytes()).unwrap();
         assert!(DreipPublicKey::verify(&pub_key, msg, &signature));
 
         // Serialize-deserialize the keys and verify.
@@ -189,36 +183,16 @@ mod tests {
     #[test]
     fn test_point_serialization() {
         let x = ProjectivePoint::random(rand::thread_rng());
-        let serialized = <ProjectivePoint as Serializable>::to_bytes(&x);
-        let y = <ProjectivePoint as Serializable>::from_bytes(&serialized).unwrap();
-        assert_eq!(x, y);
-    }
-
-    #[test]
-    fn test_point_to_bigint() {
-        let mut encoded = vec![0; 33];  // SEC1 encoding.
-        encoded[0] = 02;
-        encoded[32] = 255;
-        let point_x = <ProjectivePoint as Serializable>::from_bytes(&encoded).unwrap();
-        let x = BigUint::from_bytes_be(&encoded);
-        let y = point_x.to_bigint();
+        let serialized = Serializable::to_bytes(&x);
+        let y = Serializable::from_bytes(&serialized).unwrap();
         assert_eq!(x, y);
     }
 
     #[test]
     fn test_scalar_serialization() {
-        // Try with a simple, small value.
-        const VAL: u32 = 42;
-        let x = BigUint::from(VAL);
-        let y = Scalar::new(&x).unwrap();
-        let z = y.to_bigint();
-        assert_eq!(x, z);
-
-        // Try with a random value.
-        let distribution = RandomBits::new(Scalar::NUM_BITS.into());
-        let x: BigUint = distribution.sample(&mut rand::thread_rng());
-        let y = Scalar::new(&x).unwrap();
-        let z = y.to_bigint();
+        let x = <Scalar as DreipScalar>::random(rand::thread_rng());
+        let y = Serializable::to_bytes(&x);
+        let z = Scalar::from_bytes(&y).unwrap();
         assert_eq!(x, z);
     }
 

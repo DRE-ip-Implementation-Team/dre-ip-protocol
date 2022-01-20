@@ -1,4 +1,3 @@
-use num_bigint::BigUint;
 use rand::{CryptoRng, RngCore};
 
 /// Concrete implementation on the NIST P-256 elliptic curve.
@@ -14,29 +13,27 @@ pub trait Serializable {
 }
 
 /// A point within a DRE-ip compatible group.
-pub trait DreipPoint: Serializable {
-    /// Create a point from the given value.
-    fn new(value: &BigUint) -> Option<Self> where Self: Sized;
+pub trait DreipPoint {
+    /// The identity point of the group, i.e. the point at infinity, i.e. zero.
+    fn identity() -> Self;
     /// Create a random point deterministically from the given data via hashing.
     fn from_hash(data: &[&[u8]]) -> Self;
-    /// Convert to an integer as per the SEC1 encoding.
-    fn to_bigint(&self) -> BigUint;
 }
 
 /// A scalar within a DRE-ip compatible group.
 pub trait DreipScalar {
-    /// Create a scalar from the given value (which must be less than the scalar modulus).
-    fn new(value: &BigUint) -> Option<Self> where Self: Sized;
+    /// The zero scalar; the additive identity.
+    fn zero() -> Self;
+    /// The one scalar; the multiplicative identity.
+    fn one() -> Self;
     /// Create a securely random scalar.
     fn random(rng: impl RngCore + CryptoRng) -> Self;
     /// Create a random scalar deterministically from the given data via hashing.
     fn from_hash(data: &[&[u8]]) -> Self;
-    /// Convert a scalar back to an integer.
-    fn to_bigint(&self) -> BigUint;
 }
 
 /// A private key generated from a DRE-ip compatible group.
-pub trait DreipPrivateKey: Serializable {
+pub trait DreipPrivateKey {
     /// The signature produced by signing with this key.
     type Signature;
 
@@ -45,7 +42,7 @@ pub trait DreipPrivateKey: Serializable {
 }
 
 /// A public key generated from a DRE-ip compatible group.
-pub trait DreipPublicKey: Serializable {
+pub trait DreipPublicKey {
     /// The signature verified by this key.
     type Signature;
 
@@ -56,20 +53,20 @@ pub trait DreipPublicKey: Serializable {
 /// A DRE-ip compatible group (e.g. a DSA-like multiplicative cyclic group,
 /// or an ECDSA-like additive cyclic group).
 /// Note that in addition to satisfying all the constraints listed here,
-/// a useful implementation of this trait must also implement arithmetic
-/// on references to its `Point`s and `Scalar`s (see the trait constraints
-/// in `lib.rs`).
+/// a useful implementation of this trait must also implement arithmetic and
+/// equality on references to its `Point`s and `Scalar`s (see the trait
+/// constraints in `lib.rs`).
 pub trait DreipGroup {
     /// The signature produced by keys from this group.
     type Signature: Serializable;
     /// A point in this group.
-    type Point: DreipPoint;
+    type Point: DreipPoint + Serializable;
     /// A scalar in this group.
-    type Scalar: DreipScalar;
+    type Scalar: DreipScalar + Serializable;
     /// A private key in this group.
-    type PrivateKey: DreipPrivateKey<Signature = Self::Signature>;
+    type PrivateKey: DreipPrivateKey<Signature = Self::Signature> + Serializable;
     /// A public key in this group.
-    type PublicKey: DreipPublicKey<Signature = Self::Signature>;
+    type PublicKey: DreipPublicKey<Signature = Self::Signature> + Serializable;
 
     /// Create two new generators deterministically from the given bytes.
     /// For optimal security, `unique_bytes` should be never be re-used in another election.

@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::{Add, Mul, Sub};
-use num_bigint::BigUint;
-use num_traits::{One, Zero};
 use rand::{CryptoRng, RngCore};
 
 pub mod groups;
@@ -13,13 +11,13 @@ use crate::groups::{DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, Dre
 #[derive(Debug, Eq, PartialEq)]
 pub struct VoteProof {
     /// Challenge value one.
-    pub c1: BigUint,
+    pub c1: Box<[u8]>,
     /// Challenge value two.
-    pub c2: BigUint,
+    pub c2: Box<[u8]>,
     /// Response value one.
-    pub r1: BigUint,
+    pub r1: Box<[u8]>,
     /// Response value two.
-    pub r2: BigUint,
+    pub r2: Box<[u8]>,
 }
 
 impl VoteProof {
@@ -148,16 +146,16 @@ impl VoteProof {
         };
 
         VoteProof {
-            c1: c1.to_bigint(),
-            c2: c2.to_bigint(),
-            r1: r1.to_bigint(),
-            r2: r2.to_bigint(),
+            c1: c1.to_bytes(),
+            c2: c2.to_bytes(),
+            r1: r1.to_bytes(),
+            r2: r2.to_bytes(),
         }
     }
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify<G>(&self, election: &Election<G>, Z: &BigUint, R: &BigUint,
+    pub fn verify<G>(&self, election: &Election<G>, Z: &[u8], R: &[u8],
                      ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Option<()>
     where
         G: DreipGroup,
@@ -176,12 +174,12 @@ impl VoteProof {
         let g2 = election.g2();
 
         // Reconstruct values from bigints.
-        let Z = G::Point::new(Z)?;
-        let R = G::Point::new(R)?;
-        let c1 = G::Scalar::new(&self.c1)?;
-        let c2 = G::Scalar::new(&self.c2)?;
-        let r1 = G::Scalar::new(&self.r1)?;
-        let r2 = G::Scalar::new(&self.r2)?;
+        let Z = G::Point::from_bytes(Z)?;
+        let R = G::Point::from_bytes(R)?;
+        let c1 = G::Scalar::from_bytes(&self.c1)?;
+        let c2 = G::Scalar::from_bytes(&self.c2)?;
+        let r1 = G::Scalar::from_bytes(&self.r1)?;
+        let r2 = G::Scalar::from_bytes(&self.r2)?;
 
         // Reconstruct the `a` and `b` values.
         let a1 = &(g1 * &r1) + &(&Z * &c1);
@@ -207,24 +205,25 @@ impl VoteProof {
     /// Turn this proof into a byte sequence, suitable for signing.
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut bytes = Vec::new();
-        bytes.extend(self.c1.to_bytes_be());
-        bytes.extend(self.c2.to_bytes_be());
-        bytes.extend(self.r1.to_bytes_be());
-        bytes.extend(self.r2.to_bytes_be());
+        bytes.extend_from_slice(&self.c1);
+        bytes.extend_from_slice(&self.c2);
+        bytes.extend_from_slice(&self.r1);
+        bytes.extend_from_slice(&self.r2);
 
         bytes.into_boxed_slice()
     }
 }
 
 /// Proof of well-formedness that a ballot has exactly one positive vote.
+/// The values `a` and `b` are curve points, encoded in SEC1 format.
 #[derive(Debug, Eq, PartialEq)]
 pub struct BallotProof {
     /// Proof value a.
-    pub a: BigUint,
+    pub a: Box<[u8]>,
     /// Proof value b.
-    pub b: BigUint,
+    pub b: Box<[u8]>,
     /// Response value.
-    pub r: BigUint,
+    pub r: Box<[u8]>,
 }
 
 impl BallotProof {
@@ -293,9 +292,9 @@ impl BallotProof {
         let response = &random_scalar + &(&challenge * r_sum);
 
         BallotProof {
-            a: a.to_bigint(),
-            b: b.to_bigint(),
-            r: response.to_bigint(),
+            a: a.to_bytes(),
+            b: b.to_bytes(),
+            r: response.to_bytes(),
         }
     }
 
@@ -320,9 +319,9 @@ impl BallotProof {
         let g2 = election.g2();
 
         // Reconstruct values from bigints.
-        let a = G::Point::new(&self.a)?;
-        let b = G::Point::new(&self.b)?;
-        let r = G::Scalar::new(&self.r)?;
+        let a = G::Point::from_bytes(&self.a)?;
+        let b = G::Point::from_bytes(&self.b)?;
+        let r = G::Scalar::from_bytes(&self.r)?;
 
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
@@ -346,9 +345,9 @@ impl BallotProof {
     /// Turn this proof into a byte sequence, suitable for signing.
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut bytes = Vec::new();
-        bytes.extend(self.a.to_bytes_be());
-        bytes.extend(self.b.to_bytes_be());
-        bytes.extend(self.r.to_bytes_be());
+        bytes.extend_from_slice(&self.a);
+        bytes.extend_from_slice(&self.b);
+        bytes.extend_from_slice(&self.r);
 
         bytes.into_boxed_slice()
     }
@@ -359,13 +358,13 @@ impl BallotProof {
 #[derive(Debug, Eq, PartialEq)]
 pub struct Vote {
     /// The secret random value.
-    pub r: BigUint,
+    pub r: Box<[u8]>,
     /// The secret vote value: 1 for yes or 0 for no.
-    pub v: BigUint,
+    pub v: Box<[u8]>,
     /// The public R value (g2^r).
-    pub R: BigUint,
+    pub R: Box<[u8]>,
     /// The public Z value (g1^(r+v)).
-    pub Z: BigUint,
+    pub Z: Box<[u8]>,
     /// The proof of well-formedness that guarantees `R` and `Z` were calculated correctly.
     pub pwf: VoteProof,
 }
@@ -392,10 +391,10 @@ impl Vote {
     /// Turn this vote into a byte sequence, suitable for signing.
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut bytes = Vec::new();
-        bytes.extend(self.r.to_bytes_be());
-        bytes.extend(self.v.to_bytes_be());
-        bytes.extend(self.R.to_bytes_be());
-        bytes.extend(self.Z.to_bytes_be());
+        bytes.extend_from_slice(&self.r);
+        bytes.extend_from_slice(&self.v);
+        bytes.extend_from_slice(&self.R);
+        bytes.extend_from_slice(&self.Z);
         bytes.extend_from_slice(&self.pwf.to_bytes());
 
         bytes.into_boxed_slice()
@@ -441,21 +440,21 @@ impl<K> Ballot<K> {
 
         // Verify the ballot proof.
         let Z_values = self.votes.values()
-            .map(|vote| G::Point::new(&vote.Z))
+            .map(|vote| G::Point::from_bytes(&vote.Z))
             .collect::<Option<Vec<_>>>();
         let Z_sum: G::Point = match Z_values {
             Some(zv) => {
-                let zero = G::Point::new(&BigUint::zero()).unwrap();
+                let zero = G::Point::identity();
                 zv.into_iter().fold(zero, |a, b| &a + &b)
             },
             None => return false,
         };
         let R_values = self.votes.values()
-            .map(|vote| G::Point::new(&vote.R))
+            .map(|vote| G::Point::from_bytes(&vote.R))
             .collect::<Option<Vec<_>>>();
         let R_sum = match R_values {
             Some(rv) => {
-                let zero = G::Point::new(&BigUint::zero()).unwrap();
+                let zero = G::Point::identity();
                 rv.into_iter().fold(zero, |a, b| &a + &b)
             },
             None => return false,
@@ -560,9 +559,9 @@ impl<G> Election<G> where
             ensure_none(votes.insert(candidate, no_vote))?;
         }
         // Create PWF.
-        let zero = G::Scalar::new(&BigUint::zero()).unwrap();
+        let zero = G::Scalar::zero();
         let r_sum: G::Scalar = votes.values()
-            .map(|vote| G::Scalar::new(&vote.r).expect("Infallible"))
+            .map(|vote| G::Scalar::from_bytes(&vote.r).expect("Infallible"))
             .fold(zero, |a, b| &a + &b);
         let pwf = BallotProof::new(rng, self, &r_sum, &ballot_id);
 
@@ -596,9 +595,9 @@ impl<G> Election<G> where
         let r = G::Scalar::random(rand::thread_rng());
         // Select secret vote v.
         let v = if yes {
-            G::Scalar::new(&BigUint::one()).unwrap()
+            G::Scalar::one()
         } else {
-            G::Scalar::new(&BigUint::zero()).unwrap()
+            G::Scalar::zero()
         };
         // Calculate public random R.
         let R = &self.g2 * &r;
@@ -608,10 +607,10 @@ impl<G> Election<G> where
         let pwf = VoteProof::new(rng, self, yes, &r, &Z, &R, ballot_id, candidate);
 
         Vote {
-            r: r.to_bigint(),
-            v: v.to_bigint(),
-            R: R.to_bigint(),
-            Z: Z.to_bigint(),
+            r: r.to_bytes(),
+            v: v.to_bytes(),
+            R: R.to_bytes(),
+            Z: Z.to_bytes(),
             pwf,
         }
     }
@@ -660,7 +659,7 @@ mod tests {
         assert!(!ballot.verify(&election, "2"));
 
         // Modify pwf and check it fails.
-        ballot.pwf.r += BigUint::from(1u32);
+        ballot.pwf.r[0] += 1;
         assert!(!ballot.verify(&election, "1"));
 
         // Modify signature and check it fails.
