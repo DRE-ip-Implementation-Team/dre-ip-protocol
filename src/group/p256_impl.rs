@@ -46,6 +46,7 @@ impl DreipPoint for ProjectivePoint {
     }
 
     /// Create a point using SHA256, according to the hash_to_curve spec.
+    /// https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/
     fn from_hash(data: &[&[u8]]) -> Self {
         NistP256::hash_from_bytes::<ExpandMsgXmd<Sha256>>(data, DOMAIN_SEPARATION_TAG)
             .expect("Infallible")
@@ -75,6 +76,8 @@ impl DreipScalar for Scalar {
         <Scalar as Field>::random(rng)
     }
 
+    /// Create a scalar using SHA256, according to the hash_to_curve spec.
+    /// https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/
     fn from_hash(data: &[&[u8]]) -> Self {
         NistP256::hash_to_scalar::<ExpandMsgXmd<Sha256>>(data, DOMAIN_SEPARATION_TAG)
             .expect("Infallible")
