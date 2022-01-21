@@ -86,8 +86,6 @@ where
     /// This function does not check the validity of the generated proof, so if
     /// the supplied `v`, `r`, `Z`, and `R` values are invalid, an invalid
     /// proof will be generated.
-    ///
-    /// See the `Election` impl block for an explanation of the scary-looking trait constraints.
     #[allow(non_snake_case)]
     pub fn new(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
                v: bool, r: &G::Scalar, Z: &G::Point, R: &G::Point,

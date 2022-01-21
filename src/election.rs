@@ -129,9 +129,9 @@ pub struct Election<G: DreipGroup> {
 }
 
 /// Our trait constraints look scary here, but they simply require arithmetic to
-/// be defined on our group. The first set is point arithmetic, structured like
-/// an additive group (a multiplicative group could easily be converted with
-/// a wrapper type). The second set is scalar arithmetic.
+/// be defined on our group for both points and scalars. We treat points like an
+/// additive group; a multiplicative group could easily be converted via a
+/// wrapper type.
 impl<G> Election<G> where
     G: DreipGroup,
     G::Point: Eq,
@@ -202,6 +202,7 @@ impl<G> Election<G> where
         })
     }
 
+    /// Create a new vote, representing yes or no for a single candidate.
     #[allow(non_snake_case)]
     pub fn create_vote(&self, rng: impl RngCore + CryptoRng, ballot_id: impl AsRef<[u8]>,
                        candidate: impl AsRef<[u8]>, yes: bool) -> Vote<G> {
