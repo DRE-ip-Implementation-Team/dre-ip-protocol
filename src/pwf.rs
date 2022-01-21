@@ -6,18 +6,30 @@ use crate::group::{DreipGroup, DreipScalar, Serializable};
 
 /// Zero-Knowledge Proof of well-formedness that a vote has `v` in `{0, 1}`.
 #[derive(Debug, Eq, PartialEq)]
-pub struct VoteProof {
+pub struct VoteProof<G: DreipGroup> {
     /// Challenge value one.
-    pub c1: Vec<u8>,
+    pub c1: G::Scalar,
     /// Challenge value two.
-    pub c2: Vec<u8>,
+    pub c2: G::Scalar,
     /// Response value one.
-    pub r1: Vec<u8>,
+    pub r1: G::Scalar,
     /// Response value two.
-    pub r2: Vec<u8>,
+    pub r2: G::Scalar,
 }
 
-impl VoteProof {
+impl<G> VoteProof<G>
+where
+    G: DreipGroup,
+    G::Scalar: Eq,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
+{
     /// Create a new proof.
     ///
     /// This proof consists of two parallel sub-proofs, one of which will be
@@ -77,24 +89,12 @@ impl VoteProof {
     ///
     /// See the `Election` impl block for an explanation of the scary-looking trait constraints.
     #[allow(non_snake_case)]
-    pub fn new<G>(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
-                  v: bool, r: &G::Scalar, Z: &G::Point, R: &G::Point,
-                  ballot_id: impl AsRef<[u8]>,
-                  candidate_id: impl AsRef<[u8]>) -> Self
-    where
-        G: DreipGroup,
-        for<'a> &'a G::Point:
-            Add<Output = G::Point> +
-            Sub<Output = G::Point> +
-            Mul<&'a G::Scalar, Output = G::Point>,
-        for<'a> &'a G::Scalar:
-            Add<Output = G::Scalar> +
-            Sub<Output = G::Scalar> +
-            Mul<Output = G::Scalar>
-    {
+    pub fn new(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
+               v: bool, r: &G::Scalar, Z: &G::Point, R: &G::Point,
+               ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Self {
         // Get our generators.
-        let g1 = election.g1();
-        let g2 = election.g2();
+        let g1 = &election.g1;
+        let g2 = &election.g2;
 
         // Generate the input for our genuine proof.
         let random_scalar = G::Scalar::random(&mut rng);
@@ -143,46 +143,32 @@ impl VoteProof {
         };
 
         VoteProof {
-            c1: c1.to_bytes(),
-            c2: c2.to_bytes(),
-            r1: r1.to_bytes(),
-            r2: r2.to_bytes(),
+            c1,
+            c2,
+            r1,
+            r2,
         }
     }
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify<G>(&self, election: &Election<G>, Z: &[u8], R: &[u8],
-                     ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Option<()>
-    where
-        G: DreipGroup,
-        G::Scalar: Eq,
-        for<'a> &'a G::Point:
-            Add<Output = G::Point> +
-            Sub<Output = G::Point> +
-            Mul<&'a G::Scalar, Output = G::Point>,
-        for<'a> &'a G::Scalar:
-            Add<Output = G::Scalar> +
-            Sub<Output = G::Scalar> +
-            Mul<Output = G::Scalar>
-    {
+    pub fn verify(&self, election: &Election<G>, Z: &G::Point, R: &G::Point,
+                  ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Option<()> {
         // Get our generators.
-        let g1 = election.g1();
-        let g2 = election.g2();
+        let g1 = &election.g1;
+        let g2 = &election.g2;
 
         // Reconstruct values from bytes.
-        let Z = G::Point::from_bytes(Z)?;
-        let R = G::Point::from_bytes(R)?;
-        let c1 = G::Scalar::from_bytes(&self.c1)?;
-        let c2 = G::Scalar::from_bytes(&self.c2)?;
-        let r1 = G::Scalar::from_bytes(&self.r1)?;
-        let r2 = G::Scalar::from_bytes(&self.r2)?;
+        let c1 = &self.c1;
+        let c2 = &self.c2;
+        let r1 = &self.r1;
+        let r2 = &self.r2;
 
         // Reconstruct the `a` and `b` values.
-        let a1 = &(g1 * &r1) + &(&Z * &c1);
-        let b1 = &(g2 * &r1) + &(&R * &c1);
-        let a2 = &(g1 * &r2) + &(&(&Z - g1) * &c2);
-        let b2 = &(g2 * &r2) + &(&R * &c2);
+        let a1 = &(g1 * r1) + &(Z * c1);
+        let b1 = &(g2 * r1) + &(R * c1);
+        let a2 = &(g1 * r2) + &(&(Z - g1) * c2);
+        let b2 = &(g2 * r2) + &(R * c2);
 
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
@@ -192,7 +178,7 @@ impl VoteProof {
         ]);
 
         // Ensure that the challenge value matches.
-        if &c1 + &c2 == challenge {
+        if c1 + c2 == challenge {
             Some(())
         } else {
             None
@@ -202,10 +188,10 @@ impl VoteProof {
     /// Turn this proof into a byte sequence, suitable for signing.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(&self.c1);
-        bytes.extend_from_slice(&self.c2);
-        bytes.extend_from_slice(&self.r1);
-        bytes.extend_from_slice(&self.r2);
+        bytes.extend(self.c1.to_bytes());
+        bytes.extend(self.c2.to_bytes());
+        bytes.extend(self.r1.to_bytes());
+        bytes.extend(self.r2.to_bytes());
 
         bytes
     }
@@ -213,16 +199,28 @@ impl VoteProof {
 
 /// Zero-Knowledge Proof of well-formedness that a ballot has exactly one positive vote.
 #[derive(Debug, Eq, PartialEq)]
-pub struct BallotProof {
+pub struct BallotProof<G: DreipGroup> {
     /// Proof value a.
-    pub a: Vec<u8>,
+    pub a: G::Point,
     /// Proof value b.
-    pub b: Vec<u8>,
+    pub b: G::Point,
     /// Response value.
-    pub r: Vec<u8>,
+    pub r: G::Scalar,
 }
 
-impl BallotProof {
+impl<G> BallotProof<G>
+where
+    G: DreipGroup,
+    G::Point: Eq,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
+{
     /// Create a new proof.
     ///
     /// This proof works on a similar principle to the genuine sub-proof within `VoteProof`.
@@ -257,22 +255,11 @@ impl BallotProof {
     ///
     /// The ballot id is part of the hash input for the challenge, tying the proof to the ballot.
     /// This requires that the ballot id is unique.
-    pub fn new<G: DreipGroup>(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
-                              r_sum: &G::Scalar, ballot_id: impl AsRef<[u8]>) -> Self
-    where
-        G: DreipGroup,
-        for<'a> &'a G::Point:
-            Add<Output = G::Point> +
-            Sub<Output = G::Point> +
-            Mul<&'a G::Scalar, Output = G::Point>,
-        for<'a> &'a G::Scalar:
-            Add<Output = G::Scalar> +
-            Sub<Output = G::Scalar> +
-            Mul<Output = G::Scalar>
-    {
+    pub fn new(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
+               r_sum: &G::Scalar, ballot_id: impl AsRef<[u8]>) -> Self {
         // Get our generators.
-        let g1 = election.g1();
-        let g2 = election.g2();
+        let g1 = &election.g1;
+        let g2 = &election.g2;
 
         // Generate the input for the challenge.
         let random_scalar = G::Scalar::random(&mut rng);
@@ -285,39 +272,27 @@ impl BallotProof {
         ]);
 
         // Calculate the response.
-        let response = &random_scalar + &(&challenge * r_sum);
+        let r = &random_scalar + &(&challenge * r_sum);
 
         BallotProof {
-            a: a.to_bytes(),
-            b: b.to_bytes(),
-            r: response.to_bytes(),
+            a,
+            b,
+            r,
         }
     }
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify<G>(&self, election: &Election<G>, Z_sum: &G::Point, R_sum: &G::Point,
-                     ballot_id: impl AsRef<[u8]>) -> Option<()>
-    where
-        G: DreipGroup,
-        G::Point: Eq,
-        for<'a> &'a G::Point:
-            Add<Output = G::Point> +
-            Sub<Output = G::Point> +
-            Mul<&'a G::Scalar, Output = G::Point>,
-        for<'a> &'a G::Scalar:
-            Add<Output = G::Scalar> +
-            Sub<Output = G::Scalar> +
-            Mul<Output = G::Scalar>
-    {
+    pub fn verify(&self, election: &Election<G>, Z_sum: &G::Point, R_sum: &G::Point,
+                  ballot_id: impl AsRef<[u8]>) -> Option<()> {
         // Get our generators.
-        let g1 = election.g1();
-        let g2 = election.g2();
+        let g1 = &election.g1;
+        let g2 = &election.g2;
 
         // Reconstruct values from bytes.
-        let a = G::Point::from_bytes(&self.a)?;
-        let b = G::Point::from_bytes(&self.b)?;
-        let r = G::Scalar::from_bytes(&self.r)?;
+        let a = &self.a;
+        let b = &self.b;
+        let r = &self.r;
 
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
@@ -326,12 +301,12 @@ impl BallotProof {
 
         // Verify the first equation.
         let X = Z_sum - g1;
-        if g1 * &r != &a + &(&X * &challenge) {
+        if g1 * r != a + &(&X * &challenge) {
             return None;
         }
 
         // Verify the second equation.
-        if g2 * &r != &b + &(R_sum * &challenge) {
+        if g2 * r != b + &(R_sum * &challenge) {
             return None;
         }
 
@@ -341,9 +316,9 @@ impl BallotProof {
     /// Turn this proof into a byte sequence, suitable for signing.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(&self.a);
-        bytes.extend_from_slice(&self.b);
-        bytes.extend_from_slice(&self.r);
+        bytes.extend(self.a.to_bytes());
+        bytes.extend(self.b.to_bytes());
+        bytes.extend(self.r.to_bytes());
 
         bytes
     }

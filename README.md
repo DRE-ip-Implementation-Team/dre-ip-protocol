@@ -13,13 +13,8 @@ It provides methods to create ballots and votes.
 A `Ballot` represents a yes vote for exactly one candidate across a set of candidates, using the parallel-systems method of multiple candidate encoding (see [section 6 of the paper][paper]).
 It contains multiple `Vote`s, each of which represents a single yes or no vote for a single candidate.
 
-The values within `Ballot`s and `Vote`s are exposed in raw byte form, since their precise meaning and structure may depend on the choice of `DreipGroup`.
-When using the default `p256` implementation, scalars and curve points are stored using their [SEC1 encodings][sec1];
-this means that scalars are big-endian integers, while curve points are big-endian integers with additional metadata at the start.
-Private keys are scalars and public keys are curve points, so they follow the same format.
-Signatures are two concatenated scalars, `r` followed by `s`.
-
 ## Example Usage
+
 ```rust
 fn example() {
     let mut rng = rand::thread_rng();
@@ -31,23 +26,21 @@ fn example() {
     );
 
     // Create a ballot.
+    const BALLOT_ID: &str = "1234";
     let ballot = election.create_ballot(
         &mut rng,
-        "1234",
+        BALLOT_ID,
         "Alice",
         vec!["Bob", "Eve"]
     ).expect("This can only fail if there are non-unique candidate IDs.");
 
     // Verify the ballot.
-    assert!(ballot.verify(&election, "1234"));
+    assert!(ballot.verify(&election, BALLOT_ID));
 
     // Inspect the contents.
     println!("Alice Z value: {:?}", ballot.votes.get("Alice").unwrap().Z);
 }
 ```
-
-## TODO
-* Finalise public interface - maybe expose group-specific types instead of raw bytes?
 
 [//]: # (links)
 [paper]: https://eprint.iacr.org/2016/670.pdf

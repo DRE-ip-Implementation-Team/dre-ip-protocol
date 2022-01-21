@@ -3,6 +3,8 @@ use rand::{CryptoRng, RngCore};
 /// Concrete implementation on the NIST P-256 elliptic curve.
 #[cfg(feature = "p256_impl")]
 mod p256_impl;
+#[cfg(feature = "p256_impl")]
+pub use p256;
 
 /// An object that can be serialized to/from a binary blob.
 pub trait Serializable {
@@ -56,15 +58,15 @@ pub trait DreipPublicKey {
 /// constraints in `lib.rs`).
 pub trait DreipGroup {
     /// The signature produced by keys from this group.
-    type Signature: Serializable;
+    type Signature;
     /// A point in this group.
     type Point: DreipPoint + Serializable;
     /// A scalar in this group.
     type Scalar: DreipScalar + Serializable;
     /// A private key in this group.
-    type PrivateKey: DreipPrivateKey<Signature = Self::Signature> + Serializable;
+    type PrivateKey: DreipPrivateKey<Signature = Self::Signature>;
     /// A public key in this group.
-    type PublicKey: DreipPublicKey<Signature = Self::Signature> + Serializable;
+    type PublicKey: DreipPublicKey<Signature = Self::Signature>;
 
     /// Create two new generators deterministically from the given bytes.
     /// For optimal security, `unique_bytes` should be never be re-used in another election.

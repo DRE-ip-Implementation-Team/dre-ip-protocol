@@ -4,12 +4,14 @@ pub mod pwf;
 
 pub use crate::election::{Ballot, Election, Vote};
 pub use crate::pwf::{BallotProof, VoteProof};
-#[cfg(feature = "p256_impl")]
-pub use p256::NistP256;
 
 #[cfg(all(test, feature = "p256_impl"))]
 mod tests {
     use super::*;
+
+    use p256::NistP256;
+
+    use crate::group::{DreipScalar, Serializable};
 
     #[test]
     fn test_vote() {
@@ -39,14 +41,16 @@ mod tests {
         assert!(!ballot.verify(&election, "2"));
 
         // Modify pwf and check it fails.
-        ballot.pwf.r[0] += 1;
+        ballot.pwf.r = DreipScalar::random(&mut rng);
         assert!(!ballot.verify(&election, "1"));
 
         // Modify signature and check it fails.
         let mut ballot = election.create_ballot(&mut rng, "2", "Bob",
-                                                vec!["Alice, Eve"]).unwrap();
+                                                vec!["Alice", "Eve"]).unwrap();
         assert!(ballot.verify(&election, "2"));
-        ballot.signature[0] += 1;
+        let mut sig = ballot.signature.to_bytes();
+        sig[0] += 1;
+        ballot.signature = Serializable::from_bytes(&sig).unwrap();
         assert!(!ballot.verify(&election, "2"));
     }
 }
