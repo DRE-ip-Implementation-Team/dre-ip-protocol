@@ -12,8 +12,8 @@ mod tests {
     use p256::{NistP256, Scalar};
     use std::collections::HashMap;
 
-    use crate::election::{BallotError, VerificationError};
-    use crate::group::{DreipScalar, Serializable};
+    use crate::election::{VoteError, BallotError, VerificationError};
+    use crate::group::{DreipPoint, DreipScalar, Serializable};
 
     #[test]
     fn test_vote() {
@@ -96,6 +96,33 @@ mod tests {
         assert_eq!(election.verify(&ballots, &totals),
                    Err(VerificationError::Tally {candidate_id: "Eve"}));
 
-        // TODO more tests.
+        // Change the random sum and check it fails.
+        totals.get_mut("Eve").unwrap().0 = Scalar::from(0);
+        totals.get_mut("Alice").unwrap().1 = Scalar::random(&mut rng);
+        assert_eq!(election.verify(&ballots, &totals),
+                   Err(VerificationError::Tally {candidate_id: "Alice"}));
+
+        // Change the candidates and check it fails.
+        totals.get_mut("Alice").unwrap().1 = alice_r_sum;
+        totals.remove("Bob").unwrap();
+        assert_eq!(election.verify(&ballots, &totals),
+                   Err(VerificationError::WrongCandidates));
+
+        // Change a vote and check it fails.
+        totals.insert("Bob", (Scalar::from(1), bob_r_sum));
+        ballots.get_mut("1").unwrap()
+            .votes.get_mut("Alice").unwrap()
+            .R = DreipPoint::identity();
+        assert_eq!(election.verify(&ballots, &totals),
+                   Err(
+                       VerificationError::Ballot(
+                           BallotError::Vote(
+                               VoteError {
+                                   ballot_id: "1",
+                                   candidate_id: "Alice",
+                               }
+                           )
+                       )
+                   ));
     }
 }

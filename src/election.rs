@@ -8,7 +8,7 @@ use crate::pwf::{BallotProof, VoteProof};
 
 /// An error due to a vote failing verification.
 #[derive(Debug, Eq, PartialEq)]
-pub struct BadVoteProof<B, C> {
+pub struct VoteError<B, C> {
     pub ballot_id: B,
     pub candidate_id: C,
 }
@@ -17,7 +17,7 @@ pub struct BadVoteProof<B, C> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum BallotError<B, C> {
     /// An individual vote failed to verify.
-    Vote(BadVoteProof<B, C>),
+    Vote(VoteError<B, C>),
     /// The overall ballot proof failed to verify.
     BallotProof {ballot_id: B},
     /// The ballot signature failed to verify.
@@ -29,10 +29,8 @@ pub enum BallotError<B, C> {
 pub enum VerificationError<B, C> {
     /// An individual ballot failed to verify.
     Ballot(BallotError<B, C>),
-    /// A candidate's tally failed to verify.
+    /// A candidate's tally or random sum failed to verify.
     Tally {candidate_id: C},
-    /// A candidate's random sum failed to verify.
-    RSum {candidate_id: C},
     /// The set of candidates does not match between the ballots
     /// and the proposed tallies.
     WrongCandidates,
@@ -69,13 +67,13 @@ where
 {
     /// Verify the PWF of this vote.
     pub fn verify<B, C>(&self, election: &Election<G>, ballot_id: B,
-                        candidate_id: C) -> Result<(), BadVoteProof<B, C>>
+                        candidate_id: C) -> Result<(), VoteError<B, C>>
     where
         B: AsRef<[u8]>,
         C: AsRef<[u8]>,
     {
         self.pwf.verify(election, &self.Z, &self.R, &ballot_id, &candidate_id)
-            .ok_or(BadVoteProof {
+            .ok_or(VoteError {
                 ballot_id,
                 candidate_id,
             })
@@ -308,11 +306,8 @@ impl<G> Election<G> where
         }
         for (candidate_id, (tally, r_sum)) in totals.iter() {
             let true_totals = true_totals.get(candidate_id).expect("Already checked");
-            if &self.g1 * &(tally + r_sum) != true_totals.0 {
+            if &self.g1 * &(tally + r_sum) != true_totals.0 || &self.g2 * r_sum != true_totals.1 {
                 return Err(VerificationError::Tally {candidate_id: candidate_id.clone()});
-            }
-            if &self.g2 * r_sum != true_totals.1 {
-                return Err(VerificationError::RSum {candidate_id: candidate_id.clone()});
             }
         }
 
