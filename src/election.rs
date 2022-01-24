@@ -6,6 +6,38 @@ use std::ops::{Add, Mul, Sub};
 use crate::group::{DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, DreipScalar, Serializable};
 use crate::pwf::{BallotProof, VoteProof};
 
+/// An error due to a vote failing verification.
+#[derive(Debug, Eq, PartialEq)]
+pub struct BadVoteProof<B, C> {
+    pub ballot_id: B,
+    pub candidate_id: C,
+}
+
+/// An error due to a ballot failing verification.
+#[derive(Debug, Eq, PartialEq)]
+pub enum BallotError<B, C> {
+    /// An individual vote failed to verify.
+    Vote(BadVoteProof<B, C>),
+    /// The overall ballot proof failed to verify.
+    BallotProof {ballot_id: B},
+    /// The ballot signature failed to verify.
+    Signature {ballot_id: B},
+}
+
+/// An error due to an election failing verification.
+#[derive(Debug, Eq, PartialEq)]
+pub enum VerificationError<B, C> {
+    /// An individual ballot failed to verify.
+    Ballot(BallotError<B, C>),
+    /// A candidate's tally failed to verify.
+    Tally {candidate_id: C},
+    /// A candidate's random sum failed to verify.
+    RSum {candidate_id: C},
+    /// The set of candidates does not match between the ballots
+    /// and the proposed tallies.
+    WrongCandidates,
+}
+
 /// A single vote, representing a yes/no value for a single candidate.
 #[allow(non_snake_case)]
 #[derive(Eq, PartialEq)]
@@ -36,9 +68,17 @@ where
         Mul<Output = G::Scalar>
 {
     /// Verify the PWF of this vote.
-    pub fn verify(&self, election: &Election<G>, ballot_id: impl AsRef<[u8]>,
-                  candidate_id: impl AsRef<[u8]>) -> bool {
-        self.pwf.verify(election, &self.Z, &self.R, ballot_id, candidate_id).is_some()
+    pub fn verify<B, C>(&self, election: &Election<G>, ballot_id: B,
+                        candidate_id: C) -> Result<(), BadVoteProof<B, C>>
+    where
+        B: AsRef<[u8]>,
+        C: AsRef<[u8]>,
+    {
+        self.pwf.verify(election, &self.Z, &self.R, &ballot_id, &candidate_id)
+            .ok_or(BadVoteProof {
+                ballot_id,
+                candidate_id,
+            })
     }
 
     /// Turn this vote into a byte sequence, suitable for signing.
@@ -66,7 +106,7 @@ pub struct Ballot<C, G: DreipGroup> {
 
 impl<C, G> Ballot<C, G>
 where
-    C: AsRef<[u8]>,
+    C: AsRef<[u8]> + Clone,
     G: DreipGroup,
     G::Point: Eq,
     G::Scalar: Eq,
@@ -81,12 +121,14 @@ where
 {
     /// Verify all PWFs within this ballot.
     #[allow(non_snake_case)]
-    pub fn verify(&self, election: &Election<G>, ballot_id: impl AsRef<[u8]>) -> bool {
+    pub fn verify<B>(&self, election: &Election<G>, ballot_id: B) -> Result<(), BallotError<B, C>>
+    where
+        B: AsRef<[u8]> + Clone,
+    {
         // Verify individual vote proofs.
-        let votes_valid = self.votes.iter()
-            .all(|(candidate, vote)| vote.verify(election, &ballot_id, candidate));
-        if !votes_valid {
-            return false;
+        for (candidate, vote) in self.votes.iter() {
+            vote.verify(election, ballot_id.clone(), candidate.clone())
+                .map_err(|e| BallotError::Vote(e))?;
         }
 
         // Verify the ballot proof.
@@ -96,10 +138,8 @@ where
         let R_sum: G::Point = self.votes.values()
             .map(|vote| &vote.R)
             .fold(G::Point::identity(), |a, b| &a + b);
-        let ballot_valid = self.pwf.verify(election, &Z_sum, &R_sum, &ballot_id);
-        if ballot_valid.is_none() {
-            return false;
-        }
+        self.pwf.verify(election, &Z_sum, &R_sum, &ballot_id)
+            .ok_or(BallotError::BallotProof {ballot_id: ballot_id.clone()})?;
 
         // Verify signature
         let mut expected_bytes = Vec::new();
@@ -111,7 +151,11 @@ where
             expected_bytes.extend(vote.to_bytes());
         }
         expected_bytes.extend(self.pwf.to_bytes());
-        election.public_key.verify(&expected_bytes, &self.signature)
+        if election.public_key.verify(&expected_bytes, &self.signature) {
+            Ok(())
+        } else {
+            Err(BallotError::Signature {ballot_id})
+        }
     }
 }
 
@@ -228,6 +272,51 @@ impl<G> Election<G> where
             Z,
             pwf,
         }
+    }
+
+    /// Verify all of the given ballots, and the total tallies.
+    /// `ballots` should map ballot IDs to ballots, while `totals` should map
+    /// candidate ids to (`tally`, `random_sum`) pairs.
+    pub fn verify<B, C>(&self, ballots: &HashMap<B, Ballot<C, G>>,
+                        totals: &HashMap<C, (G::Scalar, G::Scalar)>)
+                        -> Result<(), VerificationError<B, C>>
+    where
+        B: AsRef<[u8]> + Clone,
+        C: AsRef<[u8]> + Eq + Hash + Clone,
+    {
+        // Verify individual ballots.
+        for (ballot_id, ballot) in ballots.iter() {
+            ballot.verify(self, ballot_id.clone())
+                .map_err(|e| VerificationError::Ballot(e))?;
+        }
+
+        // Calculate true totals.
+        let mut true_totals = HashMap::with_capacity(totals.len());
+        for ballot in ballots.values() {
+            for (candidate_id, vote) in ballot.votes.iter() {
+                let entry = true_totals
+                    .entry(candidate_id)
+                    .or_insert((G::Point::identity(), G::Point::identity()));
+                entry.0 = &entry.0 + &vote.Z;
+                entry.1 = &entry.1 + &vote.R;
+            }
+        }
+
+        // Verify we have the right candidates.
+        if true_totals.len() != totals.len() || !true_totals.keys().all(|k| totals.contains_key(k)) {
+            return Err(VerificationError::WrongCandidates);
+        }
+        for (candidate_id, (tally, r_sum)) in totals.iter() {
+            let true_totals = true_totals.get(candidate_id).expect("Already checked");
+            if &self.g1 * &(tally + r_sum) != true_totals.0 {
+                return Err(VerificationError::Tally {candidate_id: candidate_id.clone()});
+            }
+            if &self.g2 * r_sum != true_totals.1 {
+                return Err(VerificationError::RSum {candidate_id: candidate_id.clone()});
+            }
+        }
+
+        Ok(())
     }
 }
 
