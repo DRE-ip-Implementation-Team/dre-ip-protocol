@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::{Add, Mul, Sub};
 
-use crate::group::{DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, DreipScalar, Serializable};
+use crate::group::{DreipGroup, DreipPoint, DreipScalar};
 use crate::pwf::{BallotProof, VoteProof};
 
 /// An error due to a vote failing verification.
@@ -21,8 +21,6 @@ pub enum BallotError<B, C> {
     Vote(VoteError<B, C>),
     /// The overall ballot proof failed to verify.
     BallotProof {ballot_id: B},
-    /// The ballot signature failed to verify.
-    Signature {ballot_id: B},
 }
 
 /// An error due to an election failing verification.
@@ -88,18 +86,6 @@ where
                 candidate_id,
             })
     }
-
-    /// Turn this vote into a byte sequence, suitable for signing.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.extend(self.r.to_bytes());
-        bytes.extend(self.v.to_bytes());
-        bytes.extend(self.R.to_bytes());
-        bytes.extend(self.Z.to_bytes());
-        bytes.extend(self.pwf.to_bytes());
-
-        bytes
-    }
 }
 
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
@@ -115,10 +101,6 @@ where
 
     /// The proof of well-formedness that guarantees exactly one of the `votes` represents yes.
     pub pwf: BallotProof<G>,
-
-    /// The signature of the ballot, verifying authenticity and integrity.
-    #[serde(with = "crate::group::serde_bytestring")]
-    pub signature: G::Signature,
 }
 
 impl<C, G> Ballot<C, G>
@@ -154,23 +136,7 @@ where
             .map(|vote| &vote.R)
             .fold(G::Point::identity(), |a, b| &a + b);
         self.pwf.verify(election, &Z_sum, &R_sum, &ballot_id)
-            .ok_or(BallotError::BallotProof {ballot_id: ballot_id.clone()})?;
-
-        // Verify signature
-        let mut expected_bytes = Vec::new();
-        expected_bytes.extend(election.g1.to_bytes());
-        expected_bytes.extend(election.g2.to_bytes());
-        expected_bytes.extend(ballot_id.as_ref());
-        for (candidate, vote) in self.votes.iter() {
-            expected_bytes.extend(candidate.as_ref());
-            expected_bytes.extend(vote.to_bytes());
-        }
-        expected_bytes.extend(self.pwf.to_bytes());
-        if election.public_key.verify(&expected_bytes, &self.signature) {
-            Ok(())
-        } else {
-            Err(BallotError::Signature {ballot_id})
-        }
+            .ok_or(BallotError::BallotProof {ballot_id: ballot_id.clone()})
     }
 }
 
@@ -253,22 +219,9 @@ impl<G> Election<G> where
             .fold(G::Scalar::zero(), |a, b| &a + b);
         let pwf = BallotProof::new(rng, self, &r_sum, &ballot_id);
 
-        // Create signature.
-        let mut bytes = Vec::new();
-        bytes.extend(self.g1.to_bytes());
-        bytes.extend(self.g2.to_bytes());
-        bytes.extend(ballot_id.as_ref());
-        for (candidate, vote) in votes.iter() {
-            bytes.extend(candidate.as_ref());
-            bytes.extend(vote.to_bytes());
-        }
-        bytes.extend(pwf.to_bytes());
-        let signature = self.private_key.sign(&bytes);
-
         Some(Ballot {
             votes,
             pwf,
-            signature,
         })
     }
 
@@ -362,6 +315,15 @@ pub struct CandidateTotals<G: DreipGroup> {
     pub r_sum: G::Scalar,
 }
 
+impl<G: DreipGroup> Default for CandidateTotals<G> {
+    fn default() -> Self {
+        Self {
+            tally: G::Scalar::zero(),
+            r_sum: G::Scalar::zero(),
+        }
+    }
+}
+
 impl<G: DreipGroup> From<(G::Scalar, G::Scalar)> for CandidateTotals<G> {
     fn from((tally, r_sum): (G::Scalar, G::Scalar)) -> Self {
         Self {
@@ -382,7 +344,7 @@ where
     G: DreipGroup,
 {
     /// The election metadata.
-    pub metadata: Election<G>,
+    pub election: Election<G>,
 
     /// All cast ballots.
     pub ballots: HashMap<B, Ballot<C, G>>,
@@ -407,6 +369,6 @@ where
 {
     /// Verify the election results.
     pub fn verify(&self) -> Result<(), VerificationError<B, C>> {
-        self.metadata.verify(&self.ballots, &self.totals)
+        self.election.verify(&self.ballots, &self.totals)
     }
 }

@@ -2,7 +2,8 @@ pub mod election;
 pub mod group;
 pub mod pwf;
 
-pub use crate::election::{Ballot, Election, ElectionResults, Vote};
+pub use crate::election::{Ballot, BallotError, CandidateTotals, Election,
+                          ElectionResults, VerificationError, Vote, VoteError};
 pub use crate::pwf::{BallotProof, VoteProof};
 
 #[cfg(all(test, feature = "p256_impl"))]
@@ -13,7 +14,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::election::{VoteError, BallotError, VerificationError};
-    use crate::group::{DreipPoint, DreipScalar, Serializable};
+    use crate::group::{DreipPoint, DreipScalar};
 
     #[test]
     fn test_vote() {
@@ -49,16 +50,6 @@ mod tests {
         ballot.pwf.r = DreipScalar::random(&mut rng);
         assert_eq!(ballot.verify(&election, "1"),
                    Err(BallotError::BallotProof {ballot_id: "1"}));
-
-        // Modify signature and check it fails.
-        let mut ballot = election.create_ballot(&mut rng, "2", "Bob",
-                                                vec!["Alice", "Eve"]).unwrap();
-        assert!(ballot.verify(&election, "2").is_ok());
-        let mut sig = ballot.signature.to_bytes();
-        sig[0] += 1;
-        ballot.signature = Serializable::from_bytes(&sig).unwrap();
-        assert_eq!(ballot.verify(&election, "2"),
-                Err(BallotError::Signature {ballot_id: "2"}));
     }
 
     #[test]

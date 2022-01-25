@@ -3,8 +3,7 @@ use std::io::BufReader;
 
 use clap::Parser;
 
-use dre_ip::ElectionResults;
-use dre_ip::election::{BallotError, VerificationError, VoteError};
+use dre_ip::{BallotError, ElectionResults, VerificationError, VoteError};
 
 // Treat ballot and candidate IDs as strings, and use the NIST-P256 elliptic curve.
 type BallotId = String;
@@ -78,9 +77,6 @@ fn main() {
                         BallotError::BallotProof {ballot_id} => {
                             format!("Ballot {} has an invalid proof of well-formedness.",
                                     ballot_id)
-                        }
-                        BallotError::Signature {ballot_id} => {
-                            format!("Ballot {} has an invalid signature.", ballot_id)
                         }
                     }
                 }
