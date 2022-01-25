@@ -28,9 +28,9 @@ mod tests {
         assert!(vote2.verify(&election, "1", "Bob").is_ok());
 
         assert_ne!(vote1.pwf, vote2.pwf);
-        assert!(vote2.pwf.verify(&election, &vote1.Z, &vote1.R, "1", "Bob").is_none());
-        assert!(vote2.pwf.verify(&election, &vote2.Z, &vote2.R, "2", "Bob").is_none());
-        assert!(vote2.pwf.verify(&election, &vote2.Z, &vote2.R, "1", "Alice").is_none());
+        assert!(vote2.pwf.verify(&election, vote1.Z, vote1.R, "1", "Bob").is_none());
+        assert!(vote2.pwf.verify(&election, vote2.Z, vote2.R, "2", "Bob").is_none());
+        assert!(vote2.pwf.verify(&election, vote2.Z, vote2.R, "1", "Alice").is_none());
     }
 
     #[test]

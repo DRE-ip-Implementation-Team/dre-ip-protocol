@@ -1,3 +1,4 @@
+use std::ops::{Add, Mul, Sub};
 use rand::{CryptoRng, RngCore};
 
 /// Concrete implementation on the NIST P-256 elliptic curve.
@@ -93,17 +94,19 @@ pub trait DreipPublicKey {
 
 /// A DRE-ip compatible group (e.g. a DSA-like multiplicative cyclic group,
 /// or an ECDSA-like additive cyclic group).
-/// Note that in addition to satisfying all the constraints listed here,
-/// a useful implementation of this trait must also implement arithmetic and
-/// equality on references to its `Point`s and `Scalar`s (see the trait
-/// constraints in `lib.rs`).
 pub trait DreipGroup {
     /// The signature produced by keys from this group.
     type Signature: Serializable;
     /// A point in this group.
-    type Point: DreipPoint + Serializable + Eq;
+    type Point: DreipPoint + Serializable + Eq + Copy
+        + Add<Output = Self::Point>
+        + Sub<Output = Self::Point>
+        + Mul<Self::Scalar, Output = Self::Point>;
     /// A scalar in this group.
-    type Scalar: DreipScalar + Serializable + Eq;
+    type Scalar: DreipScalar + Serializable + Eq + Copy
+        + Add<Output = Self::Scalar>
+        + Sub<Output = Self::Scalar>
+        + Mul<Output = Self::Scalar>;
     /// A private key in this group.
     type PrivateKey: DreipPrivateKey<Signature = Self::Signature> + Serializable;
     /// A public key in this group.

@@ -1,6 +1,5 @@
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
-use std::ops::{Add, Mul, Sub};
 
 use crate::election::Election;
 use crate::group::{DreipGroup, DreipScalar, Serializable};
@@ -23,19 +22,7 @@ pub struct VoteProof<G: DreipGroup> {
     pub r2: G::Scalar,
 }
 
-impl<G> VoteProof<G>
-where
-    G: DreipGroup,
-    G::Scalar: Eq,
-    for<'a> &'a G::Point:
-        Add<Output = G::Point> +
-        Sub<Output = G::Point> +
-        Mul<&'a G::Scalar, Output = G::Point>,
-    for<'a> &'a G::Scalar:
-        Add<Output = G::Scalar> +
-        Sub<Output = G::Scalar> +
-        Mul<Output = G::Scalar>
-{
+impl<G: DreipGroup> VoteProof<G> {
     /// Create a new proof.
     ///
     /// This proof consists of two parallel sub-proofs, one of which will be
@@ -94,16 +81,16 @@ where
     /// proof will be generated.
     #[allow(non_snake_case)]
     pub fn new(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
-               v: bool, r: &G::Scalar, Z: &G::Point, R: &G::Point,
+               v: bool, r: G::Scalar, Z: G::Point, R: G::Point,
                ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Self {
         // Get our generators.
-        let g1 = &election.g1;
-        let g2 = &election.g2;
+        let g1 = election.g1;
+        let g2 = election.g2;
 
         // Generate the input for our genuine proof.
         let random_scalar = G::Scalar::random(&mut rng);
-        let genuine_a = g1 * &random_scalar;
-        let genuine_b = g2 * &random_scalar;
+        let genuine_a = g1 * random_scalar;
+        let genuine_b = g2 * random_scalar;
 
         // Generate our response and sub-challenge for the faked proof.
         let fake_response = G::Scalar::random(&mut rng);
@@ -112,13 +99,13 @@ where
         // Our fake_a varies depending on the vote.
         let fake_a = if v {
             // Fake proof for v=0, since v really equals 1.
-            &(g1 * &fake_response) + &(Z * &fake_challenge)
+            g1 * fake_response + Z * fake_challenge
         } else {
             // Fake proof for v=1, since v really equals 0.
-            &(g1 * &fake_response) + &( &(Z - g1) * &fake_challenge)
+            g1 * fake_response + (Z - g1) * fake_challenge
         };
         // Our fake_b is always the same.
-        let fake_b = &(g2 * &fake_response) + &(R * &fake_challenge);
+        let fake_b = g2 * fake_response + R * fake_challenge;
 
         // Ensure our `a` and `b` values are always in the right order (proof for v=0 first).
         let (a1, b1, a2, b2) = if v {
@@ -134,9 +121,9 @@ where
             ballot_id.as_ref(), candidate_id.as_ref(),
         ]);
         // Split this into sub-challenges.
-        let genuine_challenge = &challenge - &fake_challenge;
+        let genuine_challenge = challenge - fake_challenge;
         // Calculate the genuine response.
-        let genuine_response = &random_scalar - &(r * &genuine_challenge);
+        let genuine_response = random_scalar - r * genuine_challenge;
 
         // Re-order the values so (c1, r1) are always the proof for v=0 and
         // (c2, r2) are always the proof for v=1, regardless of which is fake.
@@ -156,23 +143,21 @@ where
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify(&self, election: &Election<G>, Z: &G::Point, R: &G::Point,
+    pub fn verify(&self, election: &Election<G>, Z: G::Point, R: G::Point,
                   ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Option<()> {
-        // Get our generators.
-        let g1 = &election.g1;
-        let g2 = &election.g2;
-
-        // Reconstruct values from bytes.
-        let c1 = &self.c1;
-        let c2 = &self.c2;
-        let r1 = &self.r1;
-        let r2 = &self.r2;
+        // Get our values.
+        let g1 = election.g1;
+        let g2 = election.g2;
+        let c1 = self.c1;
+        let c2 = self.c2;
+        let r1 = self.r1;
+        let r2 = self.r2;
 
         // Reconstruct the `a` and `b` values.
-        let a1 = &(g1 * r1) + &(Z * c1);
-        let b1 = &(g2 * r1) + &(R * c1);
-        let a2 = &(g1 * r2) + &(&(Z - g1) * c2);
-        let b2 = &(g2 * r2) + &(R * c2);
+        let a1 = g1 * r1 + Z * c1;
+        let b1 = g2 * r1 + R * c1;
+        let a2 = g1 * r2 + (Z - g1) * c2;
+        let b2 = g2 * r2 + R * c2;
 
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
@@ -216,19 +201,7 @@ pub struct BallotProof<G: DreipGroup> {
     pub r: G::Scalar,
 }
 
-impl<G> BallotProof<G>
-where
-    G: DreipGroup,
-    G::Point: Eq,
-    for<'a> &'a G::Point:
-        Add<Output = G::Point> +
-        Sub<Output = G::Point> +
-        Mul<&'a G::Scalar, Output = G::Point>,
-    for<'a> &'a G::Scalar:
-        Add<Output = G::Scalar> +
-        Sub<Output = G::Scalar> +
-        Mul<Output = G::Scalar>
-{
+impl<G: DreipGroup> BallotProof<G> {
     /// Create a new proof.
     ///
     /// This proof works on a similar principle to the genuine sub-proof within `VoteProof`.
@@ -264,15 +237,15 @@ where
     /// The ballot id is part of the hash input for the challenge, tying the proof to the ballot.
     /// This requires that the ballot id is unique.
     pub fn new(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
-               r_sum: &G::Scalar, ballot_id: impl AsRef<[u8]>) -> Self {
+               r_sum: G::Scalar, ballot_id: impl AsRef<[u8]>) -> Self {
         // Get our generators.
-        let g1 = &election.g1;
-        let g2 = &election.g2;
+        let g1 = election.g1;
+        let g2 = election.g2;
 
         // Generate the input for the challenge.
         let random_scalar = G::Scalar::random(&mut rng);
-        let a = g1 * &random_scalar;
-        let b = g2 * &random_scalar;
+        let a = g1 * random_scalar;
+        let b = g2 * random_scalar;
 
         // Get our non-interactive challenge via hashing.
         let challenge = G::Scalar::from_hash(&[
@@ -280,7 +253,7 @@ where
         ]);
 
         // Calculate the response.
-        let r = &random_scalar + &(&challenge * r_sum);
+        let r = random_scalar + challenge * r_sum;
 
         BallotProof {
             a,
@@ -291,16 +264,14 @@ where
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify(&self, election: &Election<G>, Z_sum: &G::Point, R_sum: &G::Point,
+    pub fn verify(&self, election: &Election<G>, Z_sum: G::Point, R_sum: G::Point,
                   ballot_id: impl AsRef<[u8]>) -> Option<()> {
-        // Get our generators.
-        let g1 = &election.g1;
-        let g2 = &election.g2;
-
-        // Reconstruct values from bytes.
-        let a = &self.a;
-        let b = &self.b;
-        let r = &self.r;
+        // Get our values.
+        let g1 = election.g1;
+        let g2 = election.g2;
+        let a = self.a;
+        let b = self.b;
+        let r = self.r;
 
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
@@ -309,12 +280,12 @@ where
 
         // Verify the first equation.
         let X = Z_sum - g1;
-        if g1 * r != a + &(&X * &challenge) {
+        if g1 * r != a + X * challenge {
             return None;
         }
 
         // Verify the second equation.
-        if g2 * r != b + &(R_sum * &challenge) {
+        if g2 * r != b + R_sum * challenge {
             return None;
         }
 
