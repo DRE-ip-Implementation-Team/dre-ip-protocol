@@ -32,6 +32,8 @@ pub trait Serializable {
 /// Use by putting the attribute `#[serde(with = "crate::group::serde_bytestring")]`
 /// on your field.
 pub(crate) mod serde_bytestring {
+    use serde::Deserialize;
+
     pub fn serialize<T, S>(bytes: &T, serializer: S) -> Result<S::Ok, S::Error>
         where
             T: super::Serializable,
@@ -45,8 +47,8 @@ pub(crate) mod serde_bytestring {
             T: super::Serializable,
             D: serde::Deserializer<'de>,
     {
-        serde::Deserialize::deserialize(deserializer)
-            .and_then(|bytestring| super::Serializable::from_bytestring(bytestring)
+        String::deserialize(deserializer)
+            .and_then(|bytestring| super::Serializable::from_bytestring(&bytestring)
                 .ok_or(serde::de::Error::custom("Invalid bytestring")))
     }
 }

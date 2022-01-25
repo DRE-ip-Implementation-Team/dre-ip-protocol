@@ -39,7 +39,7 @@ pub enum VerificationError<B, C> {
 #[allow(non_snake_case)]
 #[derive(Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
-pub struct Vote<G: DreipGroup> {
+pub struct UnconfirmedVote<G: DreipGroup> {
     /// The secret random value.
     #[serde(with = "crate::group::serde_bytestring")]
     pub r: G::Scalar,
@@ -60,7 +60,36 @@ pub struct Vote<G: DreipGroup> {
     pub pwf: VoteProof<G>,
 }
 
-impl<G> Vote<G>
+impl<G: DreipGroup> UnconfirmedVote<G> {
+    /// Confirm this vote, discarding `r` and `v`.
+    pub fn confirm(self) -> ConfirmedVote<G> {
+        ConfirmedVote {
+            R: self.R,
+            Z: self.Z,
+            pwf: self.pwf,
+        }
+    }
+}
+
+/// A single vote that has been confirmed, erasing the secret `r` and `v` values.
+#[allow(non_snake_case)]
+#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[serde(bound = "")]
+pub struct ConfirmedVote<G: DreipGroup> {
+    /// The public R value (g2^r).
+    #[serde(with = "crate::group::serde_bytestring")]
+    pub R: G::Point,
+
+    /// The public Z value (g1^(r+v)).
+    #[serde(with = "crate::group::serde_bytestring")]
+    pub Z: G::Point,
+
+    /// The proof of well-formedness that guarantees `R` and `Z` were calculated correctly.
+    pub pwf: VoteProof<G>,
+}
+
+#[allow(non_snake_case)]
+pub trait Vote<G>
 where
     G: DreipGroup,
     G::Scalar: Eq,
@@ -73,14 +102,18 @@ where
         Sub<Output = G::Scalar> +
         Mul<Output = G::Scalar>
 {
+    fn R(&self) -> &G::Point;
+    fn Z(&self) -> &G::Point;
+    fn pwf(&self) -> &VoteProof<G>;
+
     /// Verify the PWF of this vote.
-    pub fn verify<B, C>(&self, election: &Election<G>, ballot_id: B,
-                        candidate_id: C) -> Result<(), VoteError<B, C>>
+    fn verify<B, C>(&self, election: &Election<G>, ballot_id: B,
+                    candidate_id: C) -> Result<(), VoteError<B, C>>
     where
         B: AsRef<[u8]>,
         C: AsRef<[u8]>,
     {
-        self.pwf.verify(election, &self.Z, &self.R, &ballot_id, &candidate_id)
+        self.pwf().verify(election, self.Z(), self.R(), &ballot_id, &candidate_id)
             .ok_or(VoteError {
                 ballot_id,
                 candidate_id,
@@ -88,25 +121,87 @@ where
     }
 }
 
+#[allow(non_snake_case)]
+impl<G: DreipGroup> Vote<G> for UnconfirmedVote<G>
+where
+    G: DreipGroup,
+    G::Scalar: Eq,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
+{
+    fn R(&self) -> &G::Point {
+        &self.R
+    }
+    fn Z(&self) -> &G::Point {
+        &self.Z
+    }
+    fn pwf(&self) -> &VoteProof<G> {
+        &self.pwf
+    }
+}
+
+#[allow(non_snake_case)]
+impl<G> Vote<G> for ConfirmedVote<G>
+where
+    G: DreipGroup,
+    G::Scalar: Eq,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
+{
+    fn R(&self) -> &G::Point {
+        &self.R
+    }
+    fn Z(&self) -> &G::Point {
+        &self.Z
+    }
+    fn pwf(&self) -> &VoteProof<G> {
+        &self.pwf
+    }
+}
+
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
 #[derive(Eq, PartialEq, Deserialize, Serialize)]
-#[serde(bound(serialize = "C: Serialize", deserialize = "C: Deserialize<'de>"))]
-pub struct Ballot<C, G>
+#[serde(bound(serialize = "C: Serialize, V: Serialize",
+              deserialize = "C: Deserialize<'de>, V: Deserialize<'de>"))]
+pub struct Ballot<C, G, V>
 where
     C: Hash + Eq,
     G: DreipGroup,
+    V: Vote<G>,
+    G::Scalar: Eq,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
 {
     /// Map from candidate IDs to individual votes.
-    pub votes: HashMap<C, Vote<G>>,
+    pub votes: HashMap<C, V>,
 
     /// The proof of well-formedness that guarantees exactly one of the `votes` represents yes.
     pub pwf: BallotProof<G>,
 }
 
-impl<C, G> Ballot<C, G>
+impl<C, G, V> Ballot<C, G, V>
 where
     C: AsRef<[u8]> + Clone + Hash + Eq,
     G: DreipGroup,
+    V: Vote<G>,
     for<'a> &'a G::Point:
         Add<Output = G::Point> +
         Sub<Output = G::Point> +
@@ -130,13 +225,55 @@ where
 
         // Verify the ballot proof.
         let Z_sum: G::Point = self.votes.values()
-            .map(|vote| &vote.Z)
+            .map(|vote| vote.Z())
             .fold(G::Point::identity(), |a, b| &a + b);
         let R_sum: G::Point = self.votes.values()
-            .map(|vote| &vote.R)
+            .map(|vote| vote.R())
             .fold(G::Point::identity(), |a, b| &a + b);
         self.pwf.verify(election, &Z_sum, &R_sum, &ballot_id)
             .ok_or(BallotError::BallotProof {ballot_id: ballot_id.clone()})
+    }
+}
+
+impl<C, G> Ballot<C, G, UnconfirmedVote<G>>
+where
+    C: Hash + Eq + Clone,
+    G: DreipGroup,
+    G::Scalar: Eq,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
+{
+    /// Confirm this ballot, discarding all `r` and `v` values.
+    /// If `totals` is provided, the candidate totals will be appropriately
+    /// incremented before discarding the values.
+    pub fn confirm(self, totals: Option<&mut HashMap<C, CandidateTotals<G>>>)
+                   -> Ballot<C, G, ConfirmedVote<G>> {
+        // Increment totals if provided.
+        if let Some(totals) = totals {
+            for (candidate, vote) in self.votes.iter() {
+                let entry = totals
+                    .entry(candidate.clone())
+                    .or_default();
+                entry.tally = &entry.tally + &vote.v;
+                entry.r_sum = &entry.r_sum + &vote.r;
+            }
+        }
+
+        // Drop the secrets.
+        let votes = self.votes.into_iter()
+            .map(|(c, v)| (c, v.confirm()))
+            .collect::<HashMap<_, _>>();
+
+        Ballot {
+            votes,
+            pwf: self.pwf,
+        }
     }
 }
 
@@ -192,7 +329,8 @@ impl<G> Election<G> where
     /// the other given candidates.
     /// This will fail if any candidate IDs are duplicates.
     pub fn create_ballot<B, C>(&self, mut rng: impl RngCore + CryptoRng, ballot_id: B,
-                               yes_candidate: C, no_candidates: impl IntoIterator<Item = C>) -> Option<Ballot<C, G>>
+                               yes_candidate: C, no_candidates: impl IntoIterator<Item = C>)
+                               -> Option<Ballot<C, G, UnconfirmedVote<G>>>
     where
         B: AsRef<[u8]>,
         C: AsRef<[u8]> + Eq + Hash,
@@ -228,7 +366,7 @@ impl<G> Election<G> where
     /// Create a new vote, representing yes or no for a single candidate.
     #[allow(non_snake_case)]
     pub fn create_vote(&self, rng: impl RngCore + CryptoRng, ballot_id: impl AsRef<[u8]>,
-                       candidate: impl AsRef<[u8]>, yes: bool) -> Vote<G> {
+                       candidate: impl AsRef<[u8]>, yes: bool) -> UnconfirmedVote<G> {
         // Choose secret random r.
         let r = G::Scalar::random(rand::thread_rng());
         // Select secret vote v.
@@ -244,7 +382,7 @@ impl<G> Election<G> where
         // Create PWF.
         let pwf = VoteProof::new(rng, self, yes, &r, &Z, &R, ballot_id, candidate);
 
-        Vote {
+        UnconfirmedVote {
             r,
             v,
             R,
@@ -256,12 +394,13 @@ impl<G> Election<G> where
     /// Verify all of the given ballots, and the total tallies.
     /// `ballots` should map ballot IDs to ballots, while `totals` should map
     /// candidate ids to `CandidateTotals`.
-    pub fn verify<B, C>(&self, ballots: &HashMap<B, Ballot<C, G>>,
+    pub fn verify<B, C, V>(&self, ballots: &HashMap<B, Ballot<C, G, V>>,
                         totals: &HashMap<C, CandidateTotals<G>>)
                         -> Result<(), VerificationError<B, C>>
     where
         B: AsRef<[u8]> + Clone,
         C: AsRef<[u8]> + Eq + Hash + Clone,
+        V: Vote<G>,
     {
         // Verify individual ballots.
         for (ballot_id, ballot) in ballots.iter() {
@@ -276,8 +415,8 @@ impl<G> Election<G> where
                 let entry = true_totals
                     .entry(candidate_id)
                     .or_insert((G::Point::identity(), G::Point::identity()));
-                entry.0 = &entry.0 + &vote.Z;
-                entry.1 = &entry.1 + &vote.R;
+                entry.0 = &entry.0 + &vote.Z();
+                entry.1 = &entry.1 + &vote.R();
             }
         }
 
@@ -342,12 +481,21 @@ where
     B: Hash + Eq,
     C: Hash + Eq,
     G: DreipGroup,
+    G::Scalar: Eq,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
 {
     /// The election metadata.
     pub election: Election<G>,
 
     /// All cast ballots.
-    pub ballots: HashMap<B, Ballot<C, G>>,
+    pub ballots: HashMap<B, Ballot<C, G, ConfirmedVote<G>>>,
 
     /// Candidate tallies and random sums.
     pub totals: HashMap<C, CandidateTotals<G>>,

@@ -5,21 +5,18 @@ use std::io::BufWriter;
 use p256::NistP256;
 use rand::Rng;
 
-use dre_ip::{CandidateTotals, Election, ElectionResults};
+use dre_ip::{Election, ElectionResults};
 use dre_ip::group::Serializable;
 
 fn main() {
     let mut rng = rand::thread_rng();
     const CANDIDATES: &[&str] = &["Alice", "Bob", "Eve"];
-    const BALLOTS: &[&str] = &["0", "1", "2", "3"];
+    const BALLOTS: &[&str] = &["0", "1", "2", "3", "4"];
 
     // Create a new election.
     let election = Election::<NistP256>::new(&[b"Hello, World!"], &mut rng);
     let mut ballots = HashMap::new();
     let mut totals = HashMap::with_capacity(CANDIDATES.len());
-    for candidate in CANDIDATES {
-        totals.insert(*candidate, CandidateTotals::default());
-    }
 
     // Create and confirm ballots.
     for ballot_id in BALLOTS {
@@ -35,12 +32,7 @@ fn main() {
                                             yes_candidate, no_candidates).unwrap();
 
         // Confirm the ballot, adding the secrets to the totals.
-        for candidate in CANDIDATES {
-            let candidate_totals = totals.get_mut(*candidate).unwrap();
-            let vote = ballot.votes.get(*candidate).unwrap();
-            candidate_totals.r_sum += vote.r;
-            candidate_totals.tally += vote.v;
-        }
+        let ballot = ballot.confirm(Some(&mut totals));
         ballots.insert(*ballot_id, ballot);
     }
 
