@@ -11,6 +11,12 @@ name = "verify-election"
 path = "src/bin/verify.rs"
 required-features = ["verification"]
 
+# EXAMPLES
+[[example]]
+name = "run-election"
+path = "examples/run_election.rs"
+required-features = ["serde_json"]
+
 # FEATURES
 [features]
 default = ["p256_impl"]
