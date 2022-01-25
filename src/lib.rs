@@ -2,7 +2,7 @@ pub mod election;
 pub mod group;
 pub mod pwf;
 
-pub use crate::election::{Ballot, Election, Vote};
+pub use crate::election::{Ballot, Election, ElectionResults, Vote};
 pub use crate::pwf::{BallotProof, VoteProof};
 
 #[cfg(all(test, feature = "p256_impl"))]
@@ -85,31 +85,31 @@ mod tests {
             .fold(Scalar::zero(), |a, (_, b)| &a + &b.r);
 
         let mut totals = HashMap::new();
-        totals.insert("Alice", (Scalar::from(2), alice_r_sum));
-        totals.insert("Bob", (Scalar::from(1), bob_r_sum));
-        totals.insert("Eve", (Scalar::from(0), eve_r_sum));
+        totals.insert("Alice", (Scalar::from(2), alice_r_sum).into());
+        totals.insert("Bob", (Scalar::from(1), bob_r_sum).into());
+        totals.insert("Eve", (Scalar::from(0), eve_r_sum).into());
 
         assert!(election.verify(&ballots, &totals).is_ok());
 
         // Now change the tally and check it fails.
-        totals.get_mut("Eve").unwrap().0 = Scalar::from(5);
+        totals.get_mut("Eve").unwrap().tally = Scalar::from(5);
         assert_eq!(election.verify(&ballots, &totals),
                    Err(VerificationError::Tally {candidate_id: "Eve"}));
 
         // Change the random sum and check it fails.
-        totals.get_mut("Eve").unwrap().0 = Scalar::from(0);
-        totals.get_mut("Alice").unwrap().1 = Scalar::random(&mut rng);
+        totals.get_mut("Eve").unwrap().tally = Scalar::from(0);
+        totals.get_mut("Alice").unwrap().r_sum = Scalar::random(&mut rng);
         assert_eq!(election.verify(&ballots, &totals),
                    Err(VerificationError::Tally {candidate_id: "Alice"}));
 
         // Change the candidates and check it fails.
-        totals.get_mut("Alice").unwrap().1 = alice_r_sum;
+        totals.get_mut("Alice").unwrap().r_sum = alice_r_sum;
         totals.remove("Bob").unwrap();
         assert_eq!(election.verify(&ballots, &totals),
                    Err(VerificationError::WrongCandidates));
 
         // Change a vote and check it fails.
-        totals.insert("Bob", (Scalar::from(1), bob_r_sum));
+        totals.insert("Bob", (Scalar::from(1), bob_r_sum).into());
         ballots.get_mut("1").unwrap()
             .votes.get_mut("Alice").unwrap()
             .R = DreipPoint::identity();
@@ -123,6 +123,7 @@ mod tests {
                                }
                            )
                        )
-                   ));
+                   )
+        );
     }
 }

@@ -8,8 +8,47 @@ pub use p256;
 
 /// An object that can be serialized to/from a binary blob.
 pub trait Serializable {
+    /// Convert self to a byte sequence.
     fn to_bytes(&self) -> Vec<u8>;
+
+    /// Construct self from a byte sequence.
     fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
+
+    /// Convert self to a base64-urlsafe bytestring.
+    fn to_bytestring(&self) -> String {
+        let bytes = self.to_bytes();
+        base64::encode_config(bytes, base64::URL_SAFE_NO_PAD)
+    }
+
+    /// Construct self from a base64-urlsafe bytestring.
+    fn from_bytestring(bytestring: &str) -> Option<Self> where Self: Sized {
+        base64::decode_config(bytestring, base64::URL_SAFE_NO_PAD)
+            .ok()
+            .and_then(|bytes| Self::from_bytes(&bytes))
+    }
+}
+
+/// Serde (de)serialization to/from bytestrings on types that implement Serializable.
+/// Use by putting the attribute `#[serde(with = "crate::group::serde_bytestring")]`
+/// on your field.
+pub(crate) mod serde_bytestring {
+    pub fn serialize<T, S>(bytes: &T, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            T: super::Serializable,
+            S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&bytes.to_bytestring(), serializer)
+    }
+
+    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+        where
+            T: super::Serializable,
+            D: serde::Deserializer<'de>,
+    {
+        serde::Deserialize::deserialize(deserializer)
+            .and_then(|bytestring| super::Serializable::from_bytestring(bytestring)
+                .ok_or(serde::de::Error::custom("Invalid bytestring")))
+    }
 }
 
 /// A point within a DRE-ip compatible group.
@@ -58,15 +97,15 @@ pub trait DreipPublicKey {
 /// constraints in `lib.rs`).
 pub trait DreipGroup {
     /// The signature produced by keys from this group.
-    type Signature;
+    type Signature: Serializable;
     /// A point in this group.
-    type Point: DreipPoint + Serializable;
+    type Point: DreipPoint + Serializable + Eq;
     /// A scalar in this group.
-    type Scalar: DreipScalar + Serializable;
+    type Scalar: DreipScalar + Serializable + Eq;
     /// A private key in this group.
-    type PrivateKey: DreipPrivateKey<Signature = Self::Signature>;
+    type PrivateKey: DreipPrivateKey<Signature = Self::Signature> + Serializable;
     /// A public key in this group.
-    type PublicKey: DreipPublicKey<Signature = Self::Signature>;
+    type PublicKey: DreipPublicKey<Signature = Self::Signature> + Serializable;
 
     /// Create two new generators deterministically from the given bytes.
     /// For optimal security, `unique_bytes` should be never be re-used in another election.

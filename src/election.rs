@@ -1,4 +1,5 @@
 use rand::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::{Add, Mul, Sub};
@@ -38,16 +39,25 @@ pub enum VerificationError<B, C> {
 
 /// A single vote, representing a yes/no value for a single candidate.
 #[allow(non_snake_case)]
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[serde(bound = "")]
 pub struct Vote<G: DreipGroup> {
     /// The secret random value.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub r: G::Scalar,
+
     /// The secret vote value: 1 for yes or 0 for no.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub v: G::Scalar,
+
     /// The public R value (g2^r).
+    #[serde(with = "crate::group::serde_bytestring")]
     pub R: G::Point,
+
     /// The public Z value (g1^(r+v)).
+    #[serde(with = "crate::group::serde_bytestring")]
     pub Z: G::Point,
+
     /// The proof of well-formedness that guarantees `R` and `Z` were calculated correctly.
     pub pwf: VoteProof<G>,
 }
@@ -93,21 +103,28 @@ where
 }
 
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
-pub struct Ballot<C, G: DreipGroup> {
+#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[serde(bound(serialize = "C: Serialize", deserialize = "C: Deserialize<'de>"))]
+pub struct Ballot<C, G>
+where
+    C: Hash + Eq,
+    G: DreipGroup,
+{
     /// Map from candidate IDs to individual votes.
     pub votes: HashMap<C, Vote<G>>,
+
     /// The proof of well-formedness that guarantees exactly one of the `votes` represents yes.
     pub pwf: BallotProof<G>,
+
     /// The signature of the ballot, verifying authenticity and integrity.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub signature: G::Signature,
 }
 
 impl<C, G> Ballot<C, G>
 where
-    C: AsRef<[u8]> + Clone,
+    C: AsRef<[u8]> + Clone + Hash + Eq,
     G: DreipGroup,
-    G::Point: Eq,
-    G::Scalar: Eq,
     for<'a> &'a G::Point:
         Add<Output = G::Point> +
         Sub<Output = G::Point> +
@@ -158,15 +175,23 @@ where
 }
 
 /// An election using the given group.
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[serde(bound = "")]
 pub struct Election<G: DreipGroup> {
     /// First generator.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub g1: G::Point,
+
     /// Second generator.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub g2: G::Point,
+
     /// Signing key.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub private_key: G::PrivateKey,
+
     /// Verification key.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub public_key: G::PublicKey,
 }
 
@@ -176,8 +201,6 @@ pub struct Election<G: DreipGroup> {
 /// wrapper type.
 impl<G> Election<G> where
     G: DreipGroup,
-    G::Point: Eq,
-    G::Scalar: Eq,
     for<'a> &'a G::Point:
         Add<Output = G::Point> +
         Sub<Output = G::Point> +
@@ -203,13 +226,18 @@ impl<G> Election<G> where
     /// the other given candidates.
     /// This will fail if any candidate IDs are duplicates.
     pub fn create_ballot<B, C>(&self, mut rng: impl RngCore + CryptoRng, ballot_id: B,
-                               yes_candidate: C, no_candidates: Vec<C>) -> Option<Ballot<C, G>>
+                               yes_candidate: C, no_candidates: impl IntoIterator<Item = C>) -> Option<Ballot<C, G>>
     where
         B: AsRef<[u8]>,
         C: AsRef<[u8]> + Eq + Hash,
     {
-        let num_candidates = no_candidates.len() + 1;
-        let mut votes = HashMap::with_capacity(num_candidates);
+        let no_candidates = no_candidates.into_iter();
+
+        let mut votes = if let (_, Some(len)) = no_candidates.size_hint() {
+            HashMap::with_capacity(len)
+        } else {
+            HashMap::new()
+        };
 
         // Create yes vote.
         let yes_vote = self.create_vote(&mut rng, &ballot_id, &yes_candidate, true);
@@ -274,9 +302,9 @@ impl<G> Election<G> where
 
     /// Verify all of the given ballots, and the total tallies.
     /// `ballots` should map ballot IDs to ballots, while `totals` should map
-    /// candidate ids to (`tally`, `random_sum`) pairs.
+    /// candidate ids to `CandidateTotals`.
     pub fn verify<B, C>(&self, ballots: &HashMap<B, Ballot<C, G>>,
-                        totals: &HashMap<C, (G::Scalar, G::Scalar)>)
+                        totals: &HashMap<C, CandidateTotals<G>>)
                         -> Result<(), VerificationError<B, C>>
     where
         B: AsRef<[u8]> + Clone,
@@ -304,7 +332,7 @@ impl<G> Election<G> where
         if true_totals.len() != totals.len() || !true_totals.keys().all(|k| totals.contains_key(k)) {
             return Err(VerificationError::WrongCandidates);
         }
-        for (candidate_id, (tally, r_sum)) in totals.iter() {
+        for (candidate_id, CandidateTotals{tally, r_sum}) in totals.iter() {
             let true_totals = true_totals.get(candidate_id).expect("Already checked");
             if &self.g1 * &(tally + r_sum) != true_totals.0 || &self.g2 * r_sum != true_totals.1 {
                 return Err(VerificationError::Tally {candidate_id: candidate_id.clone()});
@@ -321,5 +349,64 @@ fn ensure_none<T>(option: Option<T>) -> Option<()> {
         Some(())
     } else {
         None
+    }
+}
+
+#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[serde(bound = "")]
+pub struct CandidateTotals<G: DreipGroup> {
+    #[serde(with = "crate::group::serde_bytestring")]
+    pub tally: G::Scalar,
+
+    #[serde(with = "crate::group::serde_bytestring")]
+    pub r_sum: G::Scalar,
+}
+
+impl<G: DreipGroup> From<(G::Scalar, G::Scalar)> for CandidateTotals<G> {
+    fn from((tally, r_sum): (G::Scalar, G::Scalar)) -> Self {
+        Self {
+            tally,
+            r_sum,
+        }
+    }
+}
+
+/// An election along with its results.
+#[derive(Deserialize, Serialize)]
+#[serde(bound(serialize = "B: Serialize, C: Serialize",
+              deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"))]
+pub struct ElectionResults<B, C, G>
+where
+    B: Hash + Eq,
+    C: Hash + Eq,
+    G: DreipGroup,
+{
+    /// The election metadata.
+    pub metadata: Election<G>,
+
+    /// All cast ballots.
+    pub ballots: HashMap<B, Ballot<C, G>>,
+
+    /// Candidate tallies and random sums.
+    pub totals: HashMap<C, CandidateTotals<G>>,
+}
+
+impl<B, C, G> ElectionResults<B, C, G>
+where
+    B: Hash + Eq + AsRef<[u8]> + Clone,
+    C: Hash + Eq + AsRef<[u8]> + Clone,
+    G: DreipGroup,
+    for<'a> &'a G::Point:
+        Add<Output = G::Point> +
+        Sub<Output = G::Point> +
+        Mul<&'a G::Scalar, Output = G::Point>,
+    for<'a> &'a G::Scalar:
+        Add<Output = G::Scalar> +
+        Sub<Output = G::Scalar> +
+        Mul<Output = G::Scalar>
+{
+    /// Verify the election results.
+    pub fn verify(&self) -> Result<(), VerificationError<B, C>> {
+        self.metadata.verify(&self.ballots, &self.totals)
     }
 }

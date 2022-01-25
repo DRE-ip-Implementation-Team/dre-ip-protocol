@@ -1,19 +1,15 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
 use clap::Parser;
-use serde::{Deserialize, Deserializer};
 
-use dre_ip::{Ballot, Election as ElectionMetadata};
+use dre_ip::ElectionResults;
 use dre_ip::election::{BallotError, VerificationError, VoteError};
-use dre_ip::group::DreipGroup;
 
 // Treat ballot and candidate IDs as strings, and use the NIST-P256 elliptic curve.
 type BallotId = String;
 type CandidateId = String;
 type Group = dre_ip::group::p256::NistP256;
-type Scalar = <Group as DreipGroup>::Scalar;
 
 /// Shown in the help message.
 const ABOUT_TEXT: &str =
@@ -44,27 +40,6 @@ enum Error {
     Verification(VerificationError<BallotId, CandidateId>),
 }
 
-/// An election to verify.
-struct Election {
-    metadata: ElectionMetadata<Group>,
-    ballots: HashMap<BallotId, Ballot<CandidateId, Group>>,
-    totals: HashMap<CandidateId, (Scalar, Scalar)>,
-}
-
-impl Election {
-    /// Verify this election.
-    pub fn verify(&self) -> Result<(), Error> {
-        self.metadata.verify(&self.ballots, &self.totals)
-            .map_err(|e| Error::Verification(e))
-    }
-}
-
-impl<'de> Deserialize<'de> for Election {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-        todo!()
-    }
-}
-
 fn main() {
     fn run() -> Result<(), Error> {
         // Try to load the file.
@@ -72,10 +47,11 @@ fn main() {
         let file = File::open(&args.file)
             .map_err(|e| Error::IO(e.to_string()))?;
         // Try to read the election dump.
-        let election: Election = serde_json::from_reader(BufReader::new(file))
-            .map_err(|_| Error::Format)?;
+        let election: ElectionResults<BallotId, CandidateId, Group> =
+            serde_json::from_reader(BufReader::new(file))
+                .map_err(|_| Error::Format)?;
         // Verify the election.
-        election.verify()
+        election.verify().map_err(|e| Error::Verification(e))
     }
 
     let exit_code: u8 = match run() {

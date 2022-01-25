@@ -1,19 +1,25 @@
 use rand::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
 use std::ops::{Add, Mul, Sub};
 
 use crate::election::Election;
 use crate::group::{DreipGroup, DreipScalar, Serializable};
 
 /// Zero-Knowledge Proof of well-formedness that a vote has `v` in `{0, 1}`.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(bound = "")]
 pub struct VoteProof<G: DreipGroup> {
     /// Challenge value one.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub c1: G::Scalar,
     /// Challenge value two.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub c2: G::Scalar,
     /// Response value one.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub r1: G::Scalar,
     /// Response value two.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub r2: G::Scalar,
 }
 
@@ -196,13 +202,17 @@ where
 }
 
 /// Zero-Knowledge Proof of well-formedness that a ballot has exactly one positive vote.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(bound = "")]
 pub struct BallotProof<G: DreipGroup> {
     /// Proof value a.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub a: G::Point,
     /// Proof value b.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub b: G::Point,
     /// Response value.
+    #[serde(with = "crate::group::serde_bytestring")]
     pub r: G::Scalar,
 }
 

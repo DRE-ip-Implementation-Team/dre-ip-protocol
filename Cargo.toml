@@ -15,9 +15,12 @@ required-features = ["verification"]
 [features]
 default = ["p256_impl"]
 p256_impl = ["sha2", "p256"]
-verification = ["clap", "serde", "serde_json"]
+verification = ["clap", "serde_json"]
 
 # DEPENDENCIES
+[dependencies.base64]
+version = "0.13.0"
+
 [dependencies.clap]
 version = "3.0.10"
 optional = true
@@ -34,7 +37,7 @@ version = "0.8.4"
 
 [dependencies.serde]
 version = "1.0.117"
-optional = true
+features = ["derive"]
 
 [dependencies.serde_json]
 version = "1.0.59"
