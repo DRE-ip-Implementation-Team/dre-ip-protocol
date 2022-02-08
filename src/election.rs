@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use crate::group::{DreipGroup, DreipPoint, DreipScalar};
+use crate::group::{DreipGroup, DreipPoint, DreipScalar, Serializable};
 use crate::pwf::{BallotProof, VoteProof};
 
 /// An error due to a vote failing verification.
@@ -89,9 +89,17 @@ pub struct ConfirmedVote<G: DreipGroup> {
 
 #[allow(non_snake_case)]
 pub trait Vote<G: DreipGroup> {
+    /// Get the public R value.
     fn R(&self) -> G::Point;
+
+    /// Get the public Z value.
     fn Z(&self) -> G::Point;
+
+    /// Get the public PWF.
     fn pwf(&self) -> &VoteProof<G>;
+
+    /// Convert to bytes for signing.
+    fn to_bytes(&self) -> Vec<u8>;
 
     /// Verify the PWF of this vote.
     fn verify<B, C>(&self, election: &Election<G>, ballot_id: B,
@@ -113,11 +121,24 @@ impl<G: DreipGroup> Vote<G> for UnconfirmedVote<G> {
     fn R(&self) -> G::Point {
         self.R
     }
+
     fn Z(&self) -> G::Point {
         self.Z
     }
+
     fn pwf(&self) -> &VoteProof<G> {
         &self.pwf
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.r.to_bytes());
+        bytes.extend(self.v.to_bytes());
+        bytes.extend(self.R.to_bytes());
+        bytes.extend(self.Z.to_bytes());
+        bytes.extend(self.pwf.to_bytes());
+
+        bytes
     }
 }
 
@@ -126,11 +147,22 @@ impl<G: DreipGroup> Vote<G> for ConfirmedVote<G> {
     fn R(&self) -> G::Point {
         self.R
     }
+
     fn Z(&self) -> G::Point {
         self.Z
     }
+
     fn pwf(&self) -> &VoteProof<G> {
         &self.pwf
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.R.to_bytes());
+        bytes.extend(self.Z.to_bytes());
+        bytes.extend(self.pwf.to_bytes());
+
+        bytes
     }
 }
 
@@ -156,6 +188,18 @@ where
     G: DreipGroup,
     V: Vote<G>,
 {
+    /// Convert to bytes for signing.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for (candidate, vote) in self.votes.iter() {
+            bytes.extend(candidate.as_ref());
+            bytes.extend(vote.to_bytes());
+        }
+        bytes.extend(self.pwf.to_bytes());
+
+        bytes
+    }
+
     /// Verify all PWFs within this ballot.
     #[allow(non_snake_case)]
     pub fn verify<B>(&self, election: &Election<G>, ballot_id: B) -> Result<(), BallotError<B, C>>
