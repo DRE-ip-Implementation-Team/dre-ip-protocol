@@ -108,9 +108,9 @@ pub trait DreipGroup {
         + Sub<Output = Self::Scalar>
         + Mul<Output = Self::Scalar>;
     /// A private key in this group.
-    type PrivateKey: DreipPrivateKey<Signature = Self::Signature> + Serializable;
+    type PrivateKey: DreipPrivateKey<Signature = Self::Signature> + Serializable + Clone;
     /// A public key in this group.
-    type PublicKey: DreipPublicKey<Signature = Self::Signature> + Serializable;
+    type PublicKey: DreipPublicKey<Signature = Self::Signature> + Serializable + Clone;
 
     /// Create two new generators deterministically from the given bytes.
     /// For optimal security, `unique_bytes` should be never be re-used in another election.

@@ -7,14 +7,14 @@ use crate::group::{DreipGroup, DreipPoint, DreipScalar, Serializable};
 use crate::pwf::{BallotProof, VoteProof};
 
 /// An error due to a vote failing verification.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct VoteError<B, C> {
     pub ballot_id: B,
     pub candidate_id: C,
 }
 
 /// An error due to a ballot failing verification.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum BallotError<B, C> {
     /// An individual vote failed to verify.
     Vote(VoteError<B, C>),
@@ -23,7 +23,7 @@ pub enum BallotError<B, C> {
 }
 
 /// An error due to an election failing verification.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum VerificationError<B, C> {
     /// An individual ballot failed to verify.
     Ballot(BallotError<B, C>),
@@ -36,7 +36,7 @@ pub enum VerificationError<B, C> {
 
 /// A single vote, representing a yes/no value for a single candidate.
 #[allow(non_snake_case)]
-#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct UnconfirmedVote<G: DreipGroup> {
     /// The secret random value.
@@ -72,7 +72,7 @@ impl<G: DreipGroup> UnconfirmedVote<G> {
 
 /// A single vote that has been confirmed, erasing the secret `r` and `v` values.
 #[allow(non_snake_case)]
-#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct ConfirmedVote<G: DreipGroup> {
     /// The public R value (g2^r).
@@ -167,7 +167,7 @@ impl<G: DreipGroup> Vote<G> for ConfirmedVote<G> {
 }
 
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
-#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(bound(serialize = "C: Serialize, V: Serialize",
               deserialize = "C: Deserialize<'de>, V: Deserialize<'de>"))]
 pub struct Ballot<C, G, V>
@@ -259,7 +259,7 @@ where
 }
 
 /// An election using the given group.
-#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Election<G: DreipGroup> {
     /// First generator.
@@ -415,7 +415,7 @@ fn ensure_none<T>(option: Option<T>) -> Option<()> {
     }
 }
 
-#[derive(Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct CandidateTotals<G: DreipGroup> {
     #[serde(with = "crate::group::serde_bytestring")]
@@ -444,7 +444,7 @@ impl<G: DreipGroup> From<(G::Scalar, G::Scalar)> for CandidateTotals<G> {
 }
 
 /// An election along with its results.
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(bound(serialize = "B: Serialize, C: Serialize",
               deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"))]
 pub struct ElectionResults<B, C, G>
