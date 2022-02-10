@@ -32,7 +32,7 @@ pub trait Serializable {
 /// Serde (de)serialization to/from bytestrings on types that implement Serializable.
 /// Use by putting the attribute `#[serde(with = "crate::group::serde_bytestring")]`
 /// on your field.
-pub(crate) mod serde_bytestring {
+pub mod serde_bytestring {
     use serde::Deserialize;
 
     pub fn serialize<T, S>(bytes: &T, serializer: S) -> Result<S::Ok, S::Error>
