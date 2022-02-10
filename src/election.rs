@@ -232,15 +232,14 @@ where
 {
     /// Confirm this ballot, discarding all `r` and `v` values.
     /// If `totals` is provided, the candidate totals will be appropriately
-    /// incremented before discarding the values.
-    pub fn confirm(self, totals: Option<&mut HashMap<C, CandidateTotals<G>>>)
+    /// incremented before discarding the values. If provided, `totals` must
+    /// contain an entry for every candidate or a panic will occur.
+    pub fn confirm(self, totals: Option<&mut HashMap<C, &mut CandidateTotals<G>>>)
                    -> Ballot<C, G, ConfirmedVote<G>> {
         // Increment totals if provided.
         if let Some(totals) = totals {
             for (candidate, vote) in self.votes.iter() {
-                let entry = totals
-                    .entry(candidate.clone())
-                    .or_default();
+                let entry = totals.get_mut(candidate).unwrap();
                 entry.tally = entry.tally + vote.v;
                 entry.r_sum = entry.r_sum + vote.r;
             }
