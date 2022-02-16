@@ -5,7 +5,7 @@ use crate::election::Election;
 use crate::group::{DreipGroup, DreipScalar, Serializable};
 
 /// Zero-Knowledge Proof of well-formedness that a vote has `v` in `{0, 1}`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct VoteProof<G: DreipGroup> {
     /// Challenge value one.
@@ -187,7 +187,7 @@ impl<G: DreipGroup> VoteProof<G> {
 }
 
 /// Zero-Knowledge Proof of well-formedness that a ballot has exactly one positive vote.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct BallotProof<G: DreipGroup> {
     /// Proof value a.

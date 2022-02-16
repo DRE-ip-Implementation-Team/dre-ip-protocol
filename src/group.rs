@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::ops::{Add, Mul, Sub};
 use rand::{CryptoRng, RngCore};
 
@@ -98,12 +99,12 @@ pub trait DreipGroup {
     /// The signature produced by keys from this group.
     type Signature: Serializable;
     /// A point in this group.
-    type Point: DreipPoint + Serializable + Eq + Copy
+    type Point: DreipPoint + Serializable + Eq + Copy + Debug
         + Add<Output = Self::Point>
         + Sub<Output = Self::Point>
         + Mul<Self::Scalar, Output = Self::Point>;
     /// A scalar in this group.
-    type Scalar: DreipScalar + Serializable + Eq + Copy
+    type Scalar: DreipScalar + Serializable + Eq + Copy + Debug
         + Add<Output = Self::Scalar>
         + Sub<Output = Self::Scalar>
         + Mul<Output = Self::Scalar>;

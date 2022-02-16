@@ -36,7 +36,7 @@ pub enum VerificationError<B, C> {
 
 /// A single vote, representing a yes/no value for a single candidate.
 #[allow(non_snake_case)]
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct UnconfirmedVote<G: DreipGroup> {
     /// The secret random value.
@@ -72,7 +72,7 @@ impl<G: DreipGroup> UnconfirmedVote<G> {
 
 /// A single vote that has been confirmed, erasing the secret `r` and `v` values.
 #[allow(non_snake_case)]
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct ConfirmedVote<G: DreipGroup> {
     /// The public R value (g2^r).
@@ -167,7 +167,7 @@ impl<G: DreipGroup> Vote<G> for ConfirmedVote<G> {
 }
 
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound(serialize = "C: Serialize, V: Serialize",
               deserialize = "C: Deserialize<'de>, V: Deserialize<'de>"))]
 pub struct Ballot<C, G, V>
@@ -414,7 +414,7 @@ fn ensure_none<T>(option: Option<T>) -> Option<()> {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct CandidateTotals<G: DreipGroup> {
     #[serde(with = "crate::group::serde_bytestring")]
