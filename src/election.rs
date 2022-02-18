@@ -258,7 +258,7 @@ where
 }
 
 /// An election using the given group.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Election<G: DreipGroup> {
     /// First generator.
@@ -414,7 +414,7 @@ fn ensure_none<T>(option: Option<T>) -> Option<()> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct CandidateTotals<G: DreipGroup> {
     #[serde(with = "crate::group::serde_bytestring")]
