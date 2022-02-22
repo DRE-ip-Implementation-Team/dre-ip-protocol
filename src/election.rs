@@ -184,14 +184,17 @@ where
 
 impl<C, G, V> Ballot<C, G, V>
 where
-    C: AsRef<[u8]> + Clone + Hash + Eq,
+    C: AsRef<[u8]> + Clone + Hash + Eq + Ord,
     G: DreipGroup,
     V: Vote<G>,
 {
     /// Convert to bytes for signing.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        for (candidate, vote) in self.votes.iter() {
+        // Hashmap order is nondeterministic, ensure we iterate in a consistent order.
+        let mut votes = self.votes.iter().collect::<Vec<_>>();
+        votes.sort_by_key(|(c, _)| *c);
+        for (candidate, vote) in votes {
             bytes.extend(candidate.as_ref());
             bytes.extend(vote.to_bytes());
         }
@@ -369,7 +372,7 @@ impl<G: DreipGroup> Election<G> {
                            -> Result<(), VerificationError<B, C>>
     where
         B: AsRef<[u8]> + Clone,
-        C: AsRef<[u8]> + Eq + Hash + Clone,
+        C: AsRef<[u8]> + Eq + Hash + Clone + Ord,
         V: Vote<G>,
     {
         // Verify individual ballots.
@@ -465,7 +468,7 @@ where
 impl<B, C, G> ElectionResults<B, C, G>
 where
     B: Hash + Eq + AsRef<[u8]> + Clone,
-    C: Hash + Eq + AsRef<[u8]> + Clone,
+    C: Hash + Eq + AsRef<[u8]> + Clone + Ord,
     G: DreipGroup,
 {
     /// Verify the election results.
