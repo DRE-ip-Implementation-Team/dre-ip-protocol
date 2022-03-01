@@ -458,8 +458,11 @@ where
     /// The election metadata.
     pub election: Election<G>,
 
-    /// All cast ballots.
-    pub ballots: HashMap<B, Ballot<C, G, ConfirmedVote<G>>>,
+    /// All audited ballots.
+    pub audited: HashMap<B, Ballot<C, G, UnconfirmedVote<G>>>,
+
+    /// All confirmed ballots.
+    pub confirmed: HashMap<B, Ballot<C, G, ConfirmedVote<G>>>,
 
     /// Candidate tallies and random sums.
     pub totals: HashMap<C, CandidateTotals<G>>,
@@ -473,6 +476,13 @@ where
 {
     /// Verify the election results.
     pub fn verify(&self) -> Result<(), VerificationError<B, C>> {
-        self.election.verify(&self.ballots, &self.totals)
+        self.election.verify(&self.confirmed, &self.totals)
+            .and_then(|()| {
+                for (ballot_id, ballot) in self.audited.iter() {
+                    ballot.verify(&self.election, ballot_id.clone())
+                        .map_err(|e| VerificationError::Ballot(e))?;
+                }
+                Ok(())
+            })
     }
 }
