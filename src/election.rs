@@ -261,7 +261,7 @@ where
 }
 
 /// An election using the given group.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Election<G: DreipGroup> {
     /// First generator.
