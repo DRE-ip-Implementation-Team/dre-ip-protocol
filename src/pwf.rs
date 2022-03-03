@@ -1,7 +1,6 @@
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 
-use crate::election::Election;
 use crate::group::{DreipGroup, DreipScalar, Serializable};
 
 /// Zero-Knowledge Proof of well-formedness that a vote has `v` in `{0, 1}`.
@@ -80,13 +79,9 @@ impl<G: DreipGroup> VoteProof<G> {
     /// the supplied `v`, `r`, `Z`, and `R` values are invalid, an invalid
     /// proof will be generated.
     #[allow(non_snake_case)]
-    pub fn new(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
+    pub fn new(mut rng: impl RngCore + CryptoRng, g1: G::Point, g2: G::Point,
                v: bool, r: G::Scalar, Z: G::Point, R: G::Point,
                ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Self {
-        // Get our generators.
-        let g1 = election.g1;
-        let g2 = election.g2;
-
         // Generate the input for our genuine proof.
         let random_scalar = G::Scalar::random(&mut rng);
         let genuine_a = g1 * random_scalar;
@@ -143,21 +138,13 @@ impl<G: DreipGroup> VoteProof<G> {
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify(&self, election: &Election<G>, Z: G::Point, R: G::Point,
+    pub fn verify(&self, g1: G::Point, g2: G::Point, Z: G::Point, R: G::Point,
                   ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Option<()> {
-        // Get our values.
-        let g1 = election.g1;
-        let g2 = election.g2;
-        let c1 = self.c1;
-        let c2 = self.c2;
-        let r1 = self.r1;
-        let r2 = self.r2;
-
         // Reconstruct the `a` and `b` values.
-        let a1 = g1 * r1 + Z * c1;
-        let b1 = g2 * r1 + R * c1;
-        let a2 = g1 * r2 + (Z - g1) * c2;
-        let b2 = g2 * r2 + R * c2;
+        let a1 = g1 * self.r1 + Z * self.c1;
+        let b1 = g2 * self.r1 + R * self.c1;
+        let a2 = g1 * self.r2 + (Z - g1) * self.c2;
+        let b2 = g2 * self.r2 + R * self.c2;
 
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
@@ -167,7 +154,7 @@ impl<G: DreipGroup> VoteProof<G> {
         ]);
 
         // Ensure that the challenge value matches.
-        if c1 + c2 == challenge {
+        if self.c1 + self.c2 == challenge {
             Some(())
         } else {
             None
@@ -236,12 +223,8 @@ impl<G: DreipGroup> BallotProof<G> {
     ///
     /// The ballot id is part of the hash input for the challenge, tying the proof to the ballot.
     /// This requires that the ballot id is unique.
-    pub fn new(mut rng: impl RngCore + CryptoRng, election: &Election<G>,
+    pub fn new(mut rng: impl RngCore + CryptoRng, g1: G::Point, g2: G::Point,
                r_sum: G::Scalar, ballot_id: impl AsRef<[u8]>) -> Self {
-        // Get our generators.
-        let g1 = election.g1;
-        let g2 = election.g2;
-
         // Generate the input for the challenge.
         let random_scalar = G::Scalar::random(&mut rng);
         let a = g1 * random_scalar;
@@ -264,28 +247,21 @@ impl<G: DreipGroup> BallotProof<G> {
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify(&self, election: &Election<G>, Z_sum: G::Point, R_sum: G::Point,
+    pub fn verify(&self, g1: G::Point, g2: G::Point, Z_sum: G::Point, R_sum: G::Point,
                   ballot_id: impl AsRef<[u8]>) -> Option<()> {
-        // Get our values.
-        let g1 = election.g1;
-        let g2 = election.g2;
-        let a = self.a;
-        let b = self.b;
-        let r = self.r;
-
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
-            &g1.to_bytes(), &g2.to_bytes(), &a.to_bytes(), &b.to_bytes(), ballot_id.as_ref(),
+            &g1.to_bytes(), &g2.to_bytes(), &self.a.to_bytes(), &self.b.to_bytes(), ballot_id.as_ref(),
         ]);
 
         // Verify the first equation.
         let X = Z_sum - g1;
-        if g1 * r != a + X * challenge {
+        if g1 * self.r != self.a + X * challenge {
             return None;
         }
 
         // Verify the second equation.
-        if g2 * r != b + R_sum * challenge {
+        if g2 * self.r != self.b + R_sum * challenge {
             return None;
         }
 

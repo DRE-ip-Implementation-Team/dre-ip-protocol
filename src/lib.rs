@@ -1,9 +1,10 @@
+pub mod ballots;
 pub mod election;
 pub mod group;
 pub mod pwf;
 
-pub use crate::election::{Ballot, BallotError, CandidateTotals, Election,
-                          ElectionResults, VerificationError, Vote, VoteError};
+pub use crate::ballots::{Ballot, BallotError, NoSecrets, VerificationError, Vote, VoteError, VoteSecrets};
+pub use crate::election::{CandidateTotals, Election, ElectionResults};
 pub use crate::pwf::{BallotProof, VoteProof};
 
 #[cfg(all(test, feature = "p256_impl"))]
@@ -13,7 +14,6 @@ mod tests {
     use p256::{NistP256, Scalar};
     use std::collections::HashMap;
 
-    use crate::election::{VoteError, BallotError, VerificationError};
     use crate::group::{DreipPoint, DreipScalar};
 
     #[test]
@@ -22,15 +22,15 @@ mod tests {
         let election = Election::<NistP256>::new(&[b"Test Election"], &mut rng);
 
         let vote1 = election.create_vote(&mut rng, "1", "Alice", true);
-        assert!(vote1.verify(&election, "1", "Alice").is_ok());
+        assert!(vote1.verify(election.g1, election.g2, "1", "Alice").is_ok());
 
         let vote2 = election.create_vote(&mut rng, "1", "Bob", false);
-        assert!(vote2.verify(&election, "1", "Bob").is_ok());
+        assert!(vote2.verify(election.g1, election.g2, "1", "Bob").is_ok());
 
         assert_ne!(vote1.pwf, vote2.pwf);
-        assert!(vote2.pwf.verify(&election, vote1.Z, vote1.R, "1", "Bob").is_none());
-        assert!(vote2.pwf.verify(&election, vote2.Z, vote2.R, "2", "Bob").is_none());
-        assert!(vote2.pwf.verify(&election, vote2.Z, vote2.R, "1", "Alice").is_none());
+        assert!(vote2.pwf.verify(election.g1, election.g2, vote1.Z, vote1.R, "1", "Bob").is_none());
+        assert!(vote2.pwf.verify(election.g1, election.g2, vote2.Z, vote2.R, "2", "Bob").is_none());
+        assert!(vote2.pwf.verify(election.g1, election.g2, vote2.Z, vote2.R, "1", "Alice").is_none());
     }
 
     #[test]
@@ -40,15 +40,15 @@ mod tests {
 
         let mut ballot = election.create_ballot(&mut rng, "1", "Alice",
                                             vec!["Bob", "Eve"]).unwrap();
-        assert!(ballot.verify(&election, "1").is_ok());
-        match ballot.verify(&election, "2") {
+        assert!(ballot.verify(election.g1, election.g2, "1").is_ok());
+        match ballot.verify(election.g1, election.g2, "2") {
             Err(BallotError::Vote(_)) => {}
             _ => panic!("Assertion failed!")
         }
 
         // Modify pwf and check it fails.
         ballot.pwf.r = DreipScalar::random(&mut rng);
-        assert_eq!(ballot.verify(&election, "1"),
+        assert_eq!(ballot.verify(election.g1, election.g2, "1"),
                    Err(BallotError::BallotProof {ballot_id: "1"}));
     }
 
@@ -67,13 +67,13 @@ mod tests {
 
         let alice_r_sum = ballots.values()
             .map(|b| b.votes.iter().find(|(c, _)| **c == "Alice").unwrap())
-            .fold(Scalar::zero(), |a, (_, b)| &a + &b.r);
+            .fold(Scalar::zero(), |a, (_, b)| &a + &b.secrets.r);
         let bob_r_sum = ballots.values()
             .map(|b| b.votes.iter().find(|(c, _)| **c == "Bob").unwrap())
-            .fold(Scalar::zero(), |a, (_, b)| &a + &b.r);
+            .fold(Scalar::zero(), |a, (_, b)| &a + &b.secrets.r);
         let eve_r_sum = ballots.values()
             .map(|b| b.votes.iter().find(|(c, _)| **c == "Eve").unwrap())
-            .fold(Scalar::zero(), |a, (_, b)| &a + &b.r);
+            .fold(Scalar::zero(), |a, (_, b)| &a + &b.secrets.r);
 
         let mut totals = HashMap::new();
         totals.insert("Alice", (Scalar::from(2), alice_r_sum).into());
