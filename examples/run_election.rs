@@ -5,8 +5,8 @@ use std::io::BufWriter;
 use p256::NistP256;
 use rand::Rng;
 
-use dre_ip::{CandidateTotals, Election, ElectionResults};
 use dre_ip::group::Serializable;
+use dre_ip::{CandidateTotals, Election, ElectionResults};
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -28,13 +28,18 @@ fn main() {
         // Pick a random candidate to vote for.
         let candidate_index = rng.gen_range(0..CANDIDATES.len());
         let yes_candidate = CANDIDATES[candidate_index];
-        let no_candidates = CANDIDATES.iter()
-            .enumerate()
-            .filter_map(|(i, c)| if i != candidate_index {Some(*c)} else {None});
+        let no_candidates = CANDIDATES.iter().enumerate().filter_map(|(i, c)| {
+            if i != candidate_index {
+                Some(*c)
+            } else {
+                None
+            }
+        });
 
         // Create the ballot.
-        let ballot = election.create_ballot(&mut rng, *ballot_id,
-                                            yes_candidate, no_candidates).unwrap();
+        let ballot = election
+            .create_ballot(&mut rng, *ballot_id, yes_candidate, no_candidates)
+            .unwrap();
 
         // Confirm the ballot, adding the secrets to the totals.
         let mut totals_mut = totals
@@ -50,13 +55,18 @@ fn main() {
         // Pick a random candidate to vote for.
         let candidate_index = rng.gen_range(0..CANDIDATES.len());
         let yes_candidate = CANDIDATES[candidate_index];
-        let no_candidates = CANDIDATES.iter()
-            .enumerate()
-            .filter_map(|(i, c)| if i != candidate_index {Some(*c)} else {None});
+        let no_candidates = CANDIDATES.iter().enumerate().filter_map(|(i, c)| {
+            if i != candidate_index {
+                Some(*c)
+            } else {
+                None
+            }
+        });
 
         // Create the ballot.
-        let ballot = election.create_ballot(&mut rng, *ballot_id,
-                                            yes_candidate, no_candidates).unwrap();
+        let ballot = election
+            .create_ballot(&mut rng, *ballot_id, yes_candidate, no_candidates)
+            .unwrap();
         audited.insert(*ballot_id, ballot);
     }
 
@@ -72,7 +82,11 @@ fn main() {
     // Announce the results.
     println!("Results:");
     for (candidate, candidate_totals) in results.totals.iter() {
-        println!("{}: {} votes", candidate, scalar_to_u64(&candidate_totals.tally).unwrap());
+        println!(
+            "{}: {} votes",
+            candidate,
+            scalar_to_u64(&candidate_totals.tally).unwrap()
+        );
     }
 
     // Dump it to a file.
@@ -83,7 +97,9 @@ fn main() {
 fn scalar_to_u64<S: Serializable>(scalar: &S) -> Option<u64> {
     const SIZE: usize = std::mem::size_of::<u64>();
 
-    let bytes: Vec<u8> = scalar.to_bytes().into_iter()
+    let bytes: Vec<u8> = scalar
+        .to_bytes()
+        .into_iter()
         .skip_while(|b| b == &0)
         .collect();
     if bytes.len() > SIZE {

@@ -12,8 +12,7 @@ type CandidateId = String;
 type Group = dre_ip::group::p256::NistP256;
 
 /// Shown in the help message.
-const ABOUT_TEXT: &str =
-"Verify the integrity of a DRE-ip election using the P256 elliptic curve.
+const ABOUT_TEXT: &str = "Verify the integrity of a DRE-ip election using the P256 elliptic curve.
 
 Exit codes:
      0: Success
@@ -42,12 +41,10 @@ enum Error {
 
 fn verify(path: impl AsRef<Path>) -> Result<(), Error> {
     // Try to load the file.
-    let file = File::open(path)
-        .map_err(|e| Error::IO(e.to_string()))?;
+    let file = File::open(path).map_err(|e| Error::IO(e.to_string()))?;
     // Try to read the election dump.
     let election: ElectionResults<BallotId, CandidateId, Group> =
-        serde_json::from_reader(BufReader::new(file))
-            .map_err(|e| Error::Format(e.to_string()))?;
+        serde_json::from_reader(BufReader::new(file)).map_err(|e| Error::Format(e.to_string()))?;
     // Verify the election.
     election.verify().map_err(|e| Error::Verification(e))
 }
@@ -68,25 +65,30 @@ fn run(args: &Args) -> u8 {
         }
         Err(Error::Verification(err)) => {
             let msg = match err {
-                VerificationError::Ballot(err) => {
-                    match err {
-                        BallotError::Vote(VoteError {ballot_id, candidate_id}) => {
-                            format!("Ballot {} has an invalid vote for candidate {}.",
-                                    ballot_id, candidate_id)
-                        }
-                        BallotError::BallotProof {ballot_id} => {
-                            format!("Ballot {} has an invalid proof of well-formedness.",
-                                    ballot_id)
-                        }
+                VerificationError::Ballot(err) => match err {
+                    BallotError::Vote(VoteError {
+                        ballot_id,
+                        candidate_id,
+                    }) => {
+                        format!(
+                            "Ballot {} has an invalid vote for candidate {}.",
+                            ballot_id, candidate_id
+                        )
                     }
-                }
-                VerificationError::Tally {candidate_id} => {
+                    BallotError::BallotProof { ballot_id } => {
+                        format!(
+                            "Ballot {} has an invalid proof of well-formedness.",
+                            ballot_id
+                        )
+                    }
+                },
+                VerificationError::Tally { candidate_id } => {
                     format!("The tally for candidate {} is incorrect.", candidate_id)
                 }
-                VerificationError::WrongCandidates => {
-                    String::from("The candidates listed in the tallies do \
-                    not match those found in the ballots.")
-                }
+                VerificationError::WrongCandidates => String::from(
+                    "The candidates listed in the tallies do \
+                    not match those found in the ballots.",
+                ),
             };
             println!("Election failed to verify: {}", msg);
             255
@@ -107,10 +109,11 @@ mod tests {
     #[test]
     fn test_verification() {
         assert!(verify("examples/election.json").is_ok());
-        assert_eq!(verify("examples/election_invalid.json"),
-                   Err(Error::Verification(
-                       VerificationError::Tally {candidate_id: "Eve".into()}
-                   ))
+        assert_eq!(
+            verify("examples/election_invalid.json"),
+            Err(Error::Verification(VerificationError::Tally {
+                candidate_id: "Eve".into()
+            }))
         );
     }
 

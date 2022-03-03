@@ -51,7 +51,7 @@ impl<G: DreipGroup> Election<G, PrivateKey<G>> {
         Self {
             g1,
             g2,
-            private_key: PrivateKey{ inner: private_key },
+            private_key: PrivateKey { inner: private_key },
             public_key,
         }
     }
@@ -61,9 +61,13 @@ impl<G: DreipGroup, PK> Election<G, PK> {
     /// Create a new ballot, representing a yes vote for the given candidate, and a no vote for all
     /// the other given candidates.
     /// This will fail if any candidate IDs are duplicates.
-    pub fn create_ballot<B, C>(&self, mut rng: impl RngCore + CryptoRng, ballot_id: B,
-                               yes_candidate: C, no_candidates: impl IntoIterator<Item = C>)
-                               -> Option<Ballot<C, G, VoteSecrets<G>>>
+    pub fn create_ballot<B, C>(
+        &self,
+        mut rng: impl RngCore + CryptoRng,
+        ballot_id: B,
+        yes_candidate: C,
+        no_candidates: impl IntoIterator<Item = C>,
+    ) -> Option<Ballot<C, G, VoteSecrets<G>>>
     where
         B: AsRef<[u8]>,
         C: AsRef<[u8]> + Eq + Hash,
@@ -85,21 +89,24 @@ impl<G: DreipGroup, PK> Election<G, PK> {
             ensure_none(votes.insert(candidate, no_vote))?;
         }
         // Create PWF.
-        let r_sum: G::Scalar = votes.values()
+        let r_sum: G::Scalar = votes
+            .values()
             .map(|vote| vote.secrets.r)
             .fold(G::Scalar::zero(), |a, b| a + b);
         let pwf = BallotProof::new(rng, self.g1, self.g2, r_sum, &ballot_id);
 
-        Some(Ballot {
-            votes,
-            pwf,
-        })
+        Some(Ballot { votes, pwf })
     }
 
     /// Create a new vote, representing yes or no for a single candidate.
     #[allow(non_snake_case)]
-    pub fn create_vote(&self, rng: impl RngCore + CryptoRng, ballot_id: impl AsRef<[u8]>,
-                       candidate: impl AsRef<[u8]>, yes: bool) -> Vote<G, VoteSecrets<G>> {
+    pub fn create_vote(
+        &self,
+        rng: impl RngCore + CryptoRng,
+        ballot_id: impl AsRef<[u8]>,
+        candidate: impl AsRef<[u8]>,
+        yes: bool,
+    ) -> Vote<G, VoteSecrets<G>> {
         // Choose secret random r.
         let r = G::Scalar::random(rand::thread_rng());
         // Select secret vote v.
@@ -116,10 +123,7 @@ impl<G: DreipGroup, PK> Election<G, PK> {
         let pwf = VoteProof::new(rng, self.g1, self.g2, yes, r, Z, R, ballot_id, candidate);
 
         Vote {
-            secrets: VoteSecrets {
-                r,
-                v,
-            },
+            secrets: VoteSecrets { r, v },
             R,
             Z,
             pwf,
@@ -129,16 +133,19 @@ impl<G: DreipGroup, PK> Election<G, PK> {
     /// Verify all of the given ballots, and the total tallies.
     /// `ballots` should map ballot IDs to ballots, while `totals` should map
     /// candidate ids to `CandidateTotals`.
-    pub fn verify<B, C, S>(&self, ballots: &HashMap<B, Ballot<C, G, S>>,
-                           totals: &HashMap<C, CandidateTotals<G>>)
-                           -> Result<(), VerificationError<B, C>>
+    pub fn verify<B, C, S>(
+        &self,
+        ballots: &HashMap<B, Ballot<C, G, S>>,
+        totals: &HashMap<C, CandidateTotals<G>>,
+    ) -> Result<(), VerificationError<B, C>>
     where
         B: AsRef<[u8]> + Clone,
         C: AsRef<[u8]> + Eq + Hash + Clone + Ord,
     {
         // Verify individual ballots.
         for (ballot_id, ballot) in ballots.iter() {
-            ballot.verify(self.g1, self.g2, ballot_id.clone())
+            ballot
+                .verify(self.g1, self.g2, ballot_id.clone())
                 .map_err(|e| VerificationError::Ballot(e))?;
         }
 
@@ -155,13 +162,16 @@ impl<G: DreipGroup, PK> Election<G, PK> {
         }
 
         // Verify we have the right candidates.
-        if true_totals.len() != totals.len() || !true_totals.keys().all(|k| totals.contains_key(k)) {
+        if true_totals.len() != totals.len() || !true_totals.keys().all(|k| totals.contains_key(k))
+        {
             return Err(VerificationError::WrongCandidates);
         }
-        for (candidate_id, CandidateTotals{tally, r_sum}) in totals.iter() {
+        for (candidate_id, CandidateTotals { tally, r_sum }) in totals.iter() {
             let true_totals = true_totals.get(candidate_id).expect("Already checked");
             if self.g1 * (*tally + *r_sum) != true_totals.0 || self.g2 * *r_sum != true_totals.1 {
-                return Err(VerificationError::Tally {candidate_id: candidate_id.clone()});
+                return Err(VerificationError::Tally {
+                    candidate_id: candidate_id.clone(),
+                });
             }
         }
 
@@ -209,17 +219,16 @@ impl<G: DreipGroup> Default for CandidateTotals<G> {
 
 impl<G: DreipGroup> From<(G::Scalar, G::Scalar)> for CandidateTotals<G> {
     fn from((tally, r_sum): (G::Scalar, G::Scalar)) -> Self {
-        Self {
-            tally,
-            r_sum,
-        }
+        Self { tally, r_sum }
     }
 }
 
 /// An election along with its results.
 #[derive(Clone, Deserialize, Serialize)]
-#[serde(bound(serialize = "B: Serialize, C: Serialize",
-              deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"))]
+#[serde(bound(
+    serialize = "B: Serialize, C: Serialize",
+    deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"
+))]
 pub struct ElectionResults<B, C, G>
 where
     B: Hash + Eq,
@@ -247,10 +256,12 @@ where
 {
     /// Verify the election results.
     pub fn verify(&self) -> Result<(), VerificationError<B, C>> {
-        self.election.verify(&self.confirmed, &self.totals)
+        self.election
+            .verify(&self.confirmed, &self.totals)
             .and_then(|()| {
                 for (ballot_id, ballot) in self.audited.iter() {
-                    ballot.verify(self.election.g1, self.election.g2, ballot_id.clone())
+                    ballot
+                        .verify(self.election.g1, self.election.g2, ballot_id.clone())
                         .map_err(|e| VerificationError::Ballot(e))?;
                 }
                 Ok(())

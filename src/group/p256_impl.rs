@@ -1,12 +1,12 @@
 use super::*;
 
-use p256::{EncodedPoint, FieldBytes, NistP256, ProjectivePoint, Scalar};
-use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use p256::ecdsa::signature::{Signature as SignatureTrait, Signer, Verifier};
-use p256::elliptic_curve::{Field, PrimeField};
+use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use p256::elliptic_curve::hash2curve::GroupDigest;
 use p256::elliptic_curve::hash2field::ExpandMsgXmd;
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+use p256::elliptic_curve::{Field, PrimeField};
+use p256::{EncodedPoint, FieldBytes, NistP256, ProjectivePoint, Scalar};
 use sha2::Sha256;
 
 /// A tag to ensure random oracle uniqueness as per the hash_to_curve spec.
@@ -17,7 +17,10 @@ impl Serializable for Signature {
         self.as_bytes().to_vec()
     }
 
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
         <Signature as SignatureTrait>::from_bytes(bytes).ok()
     }
 }
@@ -29,7 +32,10 @@ impl Serializable for ProjectivePoint {
     }
 
     /// Decode from SEC1 format.
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
         let ep = EncodedPoint::from_bytes(bytes).ok()?;
         let pp = ProjectivePoint::from_encoded_point(&ep);
         if pp.is_some().into() {
@@ -58,7 +64,10 @@ impl Serializable for Scalar {
         self.to_bytes().to_vec()
     }
 
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
         Scalar::from_repr(FieldBytes::from_exact_iter(bytes.iter().cloned())?).into()
     }
 }
@@ -89,7 +98,10 @@ impl Serializable for SigningKey {
         SigningKey::to_bytes(self).to_vec()
     }
 
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
         SigningKey::from_bytes(bytes).ok()
     }
 }
@@ -109,7 +121,10 @@ impl Serializable for VerifyingKey {
     }
 
     /// Decode from SEC1 format.
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
         EncodedPoint::from_bytes(bytes)
             .ok()
             .and_then(|ep| VerifyingKey::from_encoded_point(&ep).ok())
@@ -132,7 +147,10 @@ impl DreipGroup for NistP256 {
     type PublicKey = VerifyingKey;
 
     fn new_generators(unique_bytes: &[&[u8]]) -> (Self::Point, Self::Point) {
-        (ProjectivePoint::GENERATOR, ProjectivePoint::from_hash(unique_bytes))
+        (
+            ProjectivePoint::GENERATOR,
+            ProjectivePoint::from_hash(unique_bytes),
+        )
     }
 
     fn new_keys(rng: impl RngCore + CryptoRng) -> (Self::PrivateKey, Self::PublicKey) {

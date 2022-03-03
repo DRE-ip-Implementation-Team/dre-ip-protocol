@@ -79,9 +79,18 @@ impl<G: DreipGroup> VoteProof<G> {
     /// the supplied `v`, `r`, `Z`, and `R` values are invalid, an invalid
     /// proof will be generated.
     #[allow(non_snake_case)]
-    pub fn new(mut rng: impl RngCore + CryptoRng, g1: G::Point, g2: G::Point,
-               v: bool, r: G::Scalar, Z: G::Point, R: G::Point,
-               ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Self {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        mut rng: impl RngCore + CryptoRng,
+        g1: G::Point,
+        g2: G::Point,
+        v: bool,
+        r: G::Scalar,
+        Z: G::Point,
+        R: G::Point,
+        ballot_id: impl AsRef<[u8]>,
+        candidate_id: impl AsRef<[u8]>,
+    ) -> Self {
         // Generate the input for our genuine proof.
         let random_scalar = G::Scalar::random(&mut rng);
         let genuine_a = g1 * random_scalar;
@@ -111,9 +120,16 @@ impl<G: DreipGroup> VoteProof<G> {
 
         // Get our non-interactive challenge via hashing.
         let challenge = G::Scalar::from_hash(&[
-            &g1.to_bytes(), &g2.to_bytes(), &Z.to_bytes(), &R.to_bytes(),
-            &a1.to_bytes(), &b1.to_bytes(), &a2.to_bytes(), &b2.to_bytes(),
-            ballot_id.as_ref(), candidate_id.as_ref(),
+            &g1.to_bytes(),
+            &g2.to_bytes(),
+            &Z.to_bytes(),
+            &R.to_bytes(),
+            &a1.to_bytes(),
+            &b1.to_bytes(),
+            &a2.to_bytes(),
+            &b2.to_bytes(),
+            ballot_id.as_ref(),
+            candidate_id.as_ref(),
         ]);
         // Split this into sub-challenges.
         let genuine_challenge = challenge - fake_challenge;
@@ -123,23 +139,35 @@ impl<G: DreipGroup> VoteProof<G> {
         // Re-order the values so (c1, r1) are always the proof for v=0 and
         // (c2, r2) are always the proof for v=1, regardless of which is fake.
         let (c1, c2, r1, r2) = if v {
-            (fake_challenge, genuine_challenge, fake_response, genuine_response)
+            (
+                fake_challenge,
+                genuine_challenge,
+                fake_response,
+                genuine_response,
+            )
         } else {
-            (genuine_challenge, fake_challenge, genuine_response, fake_response)
+            (
+                genuine_challenge,
+                fake_challenge,
+                genuine_response,
+                fake_response,
+            )
         };
 
-        VoteProof {
-            c1,
-            c2,
-            r1,
-            r2,
-        }
+        VoteProof { c1, c2, r1, r2 }
     }
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify(&self, g1: G::Point, g2: G::Point, Z: G::Point, R: G::Point,
-                  ballot_id: impl AsRef<[u8]>, candidate_id: impl AsRef<[u8]>) -> Option<()> {
+    pub fn verify(
+        &self,
+        g1: G::Point,
+        g2: G::Point,
+        Z: G::Point,
+        R: G::Point,
+        ballot_id: impl AsRef<[u8]>,
+        candidate_id: impl AsRef<[u8]>,
+    ) -> Option<()> {
         // Reconstruct the `a` and `b` values.
         let a1 = g1 * self.r1 + Z * self.c1;
         let b1 = g2 * self.r1 + R * self.c1;
@@ -148,9 +176,16 @@ impl<G: DreipGroup> VoteProof<G> {
 
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
-            &g1.to_bytes(), &g2.to_bytes(), &Z.to_bytes(), &R.to_bytes(),
-            &a1.to_bytes(), &b1.to_bytes(), &a2.to_bytes(), &b2.to_bytes(),
-            ballot_id.as_ref(), candidate_id.as_ref(),
+            &g1.to_bytes(),
+            &g2.to_bytes(),
+            &Z.to_bytes(),
+            &R.to_bytes(),
+            &a1.to_bytes(),
+            &b1.to_bytes(),
+            &a2.to_bytes(),
+            &b2.to_bytes(),
+            ballot_id.as_ref(),
+            candidate_id.as_ref(),
         ]);
 
         // Ensure that the challenge value matches.
@@ -223,8 +258,13 @@ impl<G: DreipGroup> BallotProof<G> {
     ///
     /// The ballot id is part of the hash input for the challenge, tying the proof to the ballot.
     /// This requires that the ballot id is unique.
-    pub fn new(mut rng: impl RngCore + CryptoRng, g1: G::Point, g2: G::Point,
-               r_sum: G::Scalar, ballot_id: impl AsRef<[u8]>) -> Self {
+    pub fn new(
+        mut rng: impl RngCore + CryptoRng,
+        g1: G::Point,
+        g2: G::Point,
+        r_sum: G::Scalar,
+        ballot_id: impl AsRef<[u8]>,
+    ) -> Self {
         // Generate the input for the challenge.
         let random_scalar = G::Scalar::random(&mut rng);
         let a = g1 * random_scalar;
@@ -232,26 +272,36 @@ impl<G: DreipGroup> BallotProof<G> {
 
         // Get our non-interactive challenge via hashing.
         let challenge = G::Scalar::from_hash(&[
-            &g1.to_bytes(), &g2.to_bytes(), &a.to_bytes(), &b.to_bytes(), ballot_id.as_ref(),
+            &g1.to_bytes(),
+            &g2.to_bytes(),
+            &a.to_bytes(),
+            &b.to_bytes(),
+            ballot_id.as_ref(),
         ]);
 
         // Calculate the response.
         let r = random_scalar + challenge * r_sum;
 
-        BallotProof {
-            a,
-            b,
-            r,
-        }
+        BallotProof { a, b, r }
     }
 
     /// Verify the given proof, returning `Some(())` if verification succeeds and `None` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify(&self, g1: G::Point, g2: G::Point, Z_sum: G::Point, R_sum: G::Point,
-                  ballot_id: impl AsRef<[u8]>) -> Option<()> {
+    pub fn verify(
+        &self,
+        g1: G::Point,
+        g2: G::Point,
+        Z_sum: G::Point,
+        R_sum: G::Point,
+        ballot_id: impl AsRef<[u8]>,
+    ) -> Option<()> {
         // Reconstruct the challenge value.
         let challenge = G::Scalar::from_hash(&[
-            &g1.to_bytes(), &g2.to_bytes(), &self.a.to_bytes(), &self.b.to_bytes(), ballot_id.as_ref(),
+            &g1.to_bytes(),
+            &g2.to_bytes(),
+            &self.a.to_bytes(),
+            &self.b.to_bytes(),
+            ballot_id.as_ref(),
         ]);
 
         // Verify the first equation.

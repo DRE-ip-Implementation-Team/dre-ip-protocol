@@ -1,6 +1,6 @@
+use rand::{CryptoRng, RngCore};
 use std::fmt::Debug;
 use std::ops::{Add, Mul, Sub};
-use rand::{CryptoRng, RngCore};
 
 /// Concrete implementation on the NIST P-256 elliptic curve.
 #[cfg(feature = "p256_impl")]
@@ -14,7 +14,9 @@ pub trait Serializable {
     fn to_bytes(&self) -> Vec<u8>;
 
     /// Construct self from a byte sequence.
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized;
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized;
 
     /// Convert self to a base64-urlsafe bytestring.
     fn to_bytestring(&self) -> String {
@@ -23,7 +25,10 @@ pub trait Serializable {
     }
 
     /// Construct self from a base64-urlsafe bytestring.
-    fn from_bytestring(bytestring: &str) -> Option<Self> where Self: Sized {
+    fn from_bytestring(bytestring: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
         base64::decode_config(bytestring, base64::URL_SAFE_NO_PAD)
             .ok()
             .and_then(|bytes| Self::from_bytes(&bytes))
@@ -37,21 +42,22 @@ pub mod serde_bytestring {
     use serde::Deserialize;
 
     pub fn serialize<T, S>(bytes: &T, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            T: super::Serializable,
-            S: serde::Serializer,
+    where
+        T: super::Serializable,
+        S: serde::Serializer,
     {
         serde::Serialize::serialize(&bytes.to_bytestring(), serializer)
     }
 
     pub fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-        where
-            T: super::Serializable,
-            D: serde::Deserializer<'de>,
+    where
+        T: super::Serializable,
+        D: serde::Deserializer<'de>,
     {
-        String::deserialize(deserializer)
-            .and_then(|bytestring| super::Serializable::from_bytestring(&bytestring)
-                .ok_or(serde::de::Error::custom("Invalid bytestring")))
+        String::deserialize(deserializer).and_then(|bytestring| {
+            super::Serializable::from_bytestring(&bytestring)
+                .ok_or_else(|| serde::de::Error::custom("Invalid bytestring"))
+        })
     }
 }
 
@@ -99,12 +105,20 @@ pub trait DreipGroup {
     /// The signature produced by keys from this group.
     type Signature: Serializable;
     /// A point in this group.
-    type Point: DreipPoint + Serializable + Eq + Copy + Debug
+    type Point: DreipPoint
+        + Serializable
+        + Eq
+        + Copy
+        + Debug
         + Add<Output = Self::Point>
         + Sub<Output = Self::Point>
         + Mul<Self::Scalar, Output = Self::Point>;
     /// A scalar in this group.
-    type Scalar: DreipScalar + Serializable + Eq + Copy + Debug
+    type Scalar: DreipScalar
+        + Serializable
+        + Eq
+        + Copy
+        + Debug
         + Add<Output = Self::Scalar>
         + Sub<Output = Self::Scalar>
         + Mul<Output = Self::Scalar>;

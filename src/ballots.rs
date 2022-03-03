@@ -19,7 +19,7 @@ pub enum BallotError<B, C> {
     /// An individual vote failed to verify.
     Vote(VoteError<B, C>),
     /// The overall ballot proof failed to verify.
-    BallotProof {ballot_id: B},
+    BallotProof { ballot_id: B },
 }
 
 /// An error due to an election failing verification.
@@ -28,7 +28,7 @@ pub enum VerificationError<B, C> {
     /// An individual ballot failed to verify.
     Ballot(BallotError<B, C>),
     /// A candidate's tally or random sum failed to verify.
-    Tally {candidate_id: C},
+    Tally { candidate_id: C },
     /// The set of candidates does not match between the ballots
     /// and the proposed tallies.
     WrongCandidates,
@@ -47,11 +47,11 @@ pub struct VoteSecrets<G: DreipGroup> {
     pub v: G::Scalar,
 }
 
-impl<'a, G: DreipGroup> Into<Vec<u8>> for &'a VoteSecrets<G> {
-    fn into(self) -> Vec<u8> {
+impl<'a, G: DreipGroup> From<&'a VoteSecrets<G>> for Vec<u8> {
+    fn from(secrets: &'a VoteSecrets<G>) -> Self {
         let mut bytes = Vec::new();
-        bytes.extend(self.r.to_bytes());
-        bytes.extend(self.v.to_bytes());
+        bytes.extend(secrets.r.to_bytes());
+        bytes.extend(secrets.v.to_bytes());
 
         bytes
     }
@@ -61,8 +61,8 @@ impl<'a, G: DreipGroup> Into<Vec<u8>> for &'a VoteSecrets<G> {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct NoSecrets(#[serde(skip)] pub ());
 
-impl<'a> Into<Vec<u8>> for &'a NoSecrets {
-    fn into(self) -> Vec<u8> {
+impl<'a> From<&'a NoSecrets> for Vec<u8> {
+    fn from(_: &'a NoSecrets) -> Self {
         Vec::new()
     }
 }
@@ -90,13 +90,19 @@ pub struct Vote<G: DreipGroup, S> {
 
 impl<G: DreipGroup, S> Vote<G, S> {
     /// Verify the PWF of this vote.
-    pub fn verify<B, C>(&self, g1: G::Point, g2: G::Point, ballot_id: B,
-                    candidate_id: C) -> Result<(), VoteError<B, C>>
-        where
-            B: AsRef<[u8]>,
-            C: AsRef<[u8]>,
+    pub fn verify<B, C>(
+        &self,
+        g1: G::Point,
+        g2: G::Point,
+        ballot_id: B,
+        candidate_id: C,
+    ) -> Result<(), VoteError<B, C>>
+    where
+        B: AsRef<[u8]>,
+        C: AsRef<[u8]>,
     {
-        self.pwf.verify(g1, g2, self.Z, self.R, &ballot_id, &candidate_id)
+        self.pwf
+            .verify(g1, g2, self.Z, self.R, &ballot_id, &candidate_id)
             .ok_or(VoteError {
                 ballot_id,
                 candidate_id,
@@ -134,12 +140,14 @@ impl<G: DreipGroup> Vote<G, VoteSecrets<G>> {
 
 /// A single ballot, representing a yes for exactly one candidate across a set of candidates.
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(bound(serialize = "C: Serialize, S: Serialize",
-deserialize = "C: Deserialize<'de>, S: Deserialize<'de>"))]
+#[serde(bound(
+    serialize = "C: Serialize, S: Serialize",
+    deserialize = "C: Deserialize<'de>, S: Deserialize<'de>"
+))]
 pub struct Ballot<C, G, S>
-    where
-        C: Hash + Eq,
-        G: DreipGroup,
+where
+    C: Hash + Eq,
+    G: DreipGroup,
 {
     /// Map from candidate IDs to individual votes.
     pub votes: HashMap<C, Vote<G, S>>,
@@ -149,10 +157,10 @@ pub struct Ballot<C, G, S>
 }
 
 impl<C, G, S> Ballot<C, G, S>
-    where
-        C: AsRef<[u8]> + Clone + Hash + Eq + Ord,
-        G: DreipGroup,
-        for<'a> &'a S: Into<Vec<u8>>,
+where
+    C: AsRef<[u8]> + Clone + Hash + Eq + Ord,
+    G: DreipGroup,
+    for<'a> &'a S: Into<Vec<u8>>,
 {
     /// Convert to bytes for signing.
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -171,15 +179,20 @@ impl<C, G, S> Ballot<C, G, S>
 }
 
 impl<C, G, S> Ballot<C, G, S>
-    where
-        C: Hash + Eq + Clone + AsRef<[u8]>,
-        G: DreipGroup,
+where
+    C: Hash + Eq + Clone + AsRef<[u8]>,
+    G: DreipGroup,
 {
     /// Verify all PWFs within this ballot.
     #[allow(non_snake_case)]
-    pub fn verify<B>(&self, g1: G::Point, g2: G::Point, ballot_id: B) -> Result<(), BallotError<B, C>>
-        where
-            B: AsRef<[u8]> + Clone,
+    pub fn verify<B>(
+        &self,
+        g1: G::Point,
+        g2: G::Point,
+        ballot_id: B,
+    ) -> Result<(), BallotError<B, C>>
+    where
+        B: AsRef<[u8]> + Clone,
     {
         // Verify individual vote proofs.
         for (candidate, vote) in self.votes.iter() {
@@ -188,29 +201,36 @@ impl<C, G, S> Ballot<C, G, S>
         }
 
         // Verify the ballot proof.
-        let Z_sum: G::Point = self.votes.values()
+        let Z_sum: G::Point = self
+            .votes
+            .values()
             .map(|vote| vote.Z)
             .fold(G::Point::identity(), |a, b| a + b);
-        let R_sum: G::Point = self.votes.values()
+        let R_sum: G::Point = self
+            .votes
+            .values()
             .map(|vote| vote.R)
             .fold(G::Point::identity(), |a, b| a + b);
-        self.pwf.verify(g1, g2, Z_sum, R_sum, &ballot_id)
-            .ok_or(BallotError::BallotProof {ballot_id: ballot_id.clone()})
+        self.pwf
+            .verify(g1, g2, Z_sum, R_sum, &ballot_id)
+            .ok_or(BallotError::BallotProof { ballot_id })
     }
 }
 
 impl<C, G> Ballot<C, G, VoteSecrets<G>>
-    where
-        C: Hash + Eq + Clone,
-        G: DreipGroup,
-        G::Scalar: Eq,
+where
+    C: Hash + Eq + Clone,
+    G: DreipGroup,
+    G::Scalar: Eq,
 {
     /// Confirm this ballot, discarding all `r` and `v` values.
     /// If `totals` is provided, the candidate totals will be appropriately
     /// incremented before discarding the values. If provided, `totals` must
     /// contain an entry for every candidate or a panic will occur.
-    pub fn confirm(self, totals: Option<&mut HashMap<C, &mut CandidateTotals<G>>>)
-                   -> Ballot<C, G, NoSecrets> {
+    pub fn confirm(
+        self,
+        totals: Option<&mut HashMap<C, &mut CandidateTotals<G>>>,
+    ) -> Ballot<C, G, NoSecrets> {
         // Increment totals if provided.
         if let Some(totals) = totals {
             for (candidate, vote) in self.votes.iter() {
@@ -221,7 +241,9 @@ impl<C, G> Ballot<C, G, VoteSecrets<G>>
         }
 
         // Drop the secrets.
-        let votes = self.votes.into_iter()
+        let votes = self
+            .votes
+            .into_iter()
             .map(|(c, v)| (c, v.confirm()))
             .collect::<HashMap<_, _>>();
 
