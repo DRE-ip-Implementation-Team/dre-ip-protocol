@@ -7,6 +7,9 @@ pub use crate::ballots::{
     Ballot, BallotError, NoSecrets, VerificationError, Vote, VoteError, VoteSecrets,
 };
 pub use crate::election::{CandidateTotals, Election, ElectionResults, PrivateKey};
+pub use crate::group::{
+    DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, DreipScalar, Serializable,
+};
 pub use crate::pwf::{BallotProof, VoteProof};
 
 #[cfg(all(test, feature = "p256_impl"))]
