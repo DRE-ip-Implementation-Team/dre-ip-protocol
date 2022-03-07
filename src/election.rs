@@ -32,14 +32,14 @@ pub struct Election<G: DreipGroup, S> {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PrivateKey<G: DreipGroup> {
     #[serde(with = "crate::group::serde_bytestring")]
-    pub inner: G::PrivateKey,
+    pub private_key: G::PrivateKey,
 }
 
 impl<G: DreipGroup> Deref for PrivateKey<G> {
     type Target = G::PrivateKey;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        &self.private_key
     }
 }
 
@@ -51,7 +51,7 @@ impl<G: DreipGroup> Election<G, PrivateKey<G>> {
         Self {
             g1,
             g2,
-            private_key: PrivateKey { inner: private_key },
+            private_key: PrivateKey { private_key },
             public_key,
         }
     }
