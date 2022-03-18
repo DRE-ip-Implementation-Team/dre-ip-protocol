@@ -47,6 +47,9 @@ impl<G: DreipGroup> Election<G, PrivateKey<G>> {
     /// Create a new election with random generators and keys.
     pub fn new(unique_bytes: &[&[u8]], rng: impl RngCore + CryptoRng) -> Self {
         let (g1, g2) = G::new_generators(unique_bytes);
+        // Sanity check. This should never fail, but we'd like a big loud warning if it does.
+        assert_ne!(g1, G::Point::identity());
+        assert_ne!(g2, G::Point::identity());
         let (private_key, public_key) = G::new_keys(rng);
         Self {
             g1,
@@ -102,13 +105,13 @@ impl<G: DreipGroup, PK> Election<G, PK> {
     #[allow(non_snake_case)]
     pub fn create_vote(
         &self,
-        rng: impl RngCore + CryptoRng,
+        mut rng: impl RngCore + CryptoRng,
         ballot_id: impl AsRef<[u8]>,
         candidate: impl AsRef<[u8]>,
         yes: bool,
     ) -> Vote<G, VoteSecrets<G>> {
         // Choose secret random r.
-        let r = G::Scalar::random(rand::thread_rng());
+        let r = G::Scalar::random(&mut rng);
         // Select secret vote v.
         let v = if yes {
             G::Scalar::one()

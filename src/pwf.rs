@@ -24,6 +24,8 @@ pub struct VoteProof<G: DreipGroup> {
 impl<G: DreipGroup> VoteProof<G> {
     /// Create a new proof.
     ///
+    /// Based on: https://eprint.iacr.org/2010/452.pdf (Figure 2)
+    ///
     /// This proof consists of two parallel sub-proofs, one of which will be
     /// genuine, and the other faked. Due to the way the sub-challenges `c1`
     /// and `c2` must sum to the total challenge `c`, it is impossible for both
@@ -225,6 +227,8 @@ pub struct BallotProof<G: DreipGroup> {
 
 impl<G: DreipGroup> BallotProof<G> {
     /// Create a new proof.
+    ///
+    /// Based on: https://eprint.iacr.org/2014/364.pdf (Figure 2)
     ///
     /// This proof works on a similar principle to the genuine sub-proof within `VoteProof`.
     /// It works as follows:
