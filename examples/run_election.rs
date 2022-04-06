@@ -1,12 +1,10 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufWriter;
 
 use p256::NistP256;
 use rand::Rng;
 
 use dre_ip::group::Serializable;
-use dre_ip::{CandidateTotals, Election, ElectionResults};
+use dre_ip::{Ballot, CandidateTotals, Election};
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -37,9 +35,15 @@ fn main() {
         });
 
         // Create the ballot.
-        let ballot = election
-            .create_ballot(&mut rng, *ballot_id, yes_candidate, no_candidates)
-            .unwrap();
+        let ballot = Ballot::<_, NistP256, _>::new(
+            &mut rng,
+            election.g1,
+            election.g2,
+            *ballot_id,
+            yes_candidate,
+            no_candidates,
+        )
+        .unwrap();
 
         // Confirm the ballot, adding the secrets to the totals.
         let mut totals_mut = totals
@@ -64,34 +68,34 @@ fn main() {
         });
 
         // Create the ballot.
-        let ballot = election
-            .create_ballot(&mut rng, *ballot_id, yes_candidate, no_candidates)
-            .unwrap();
+        let ballot = Ballot::<_, NistP256, _>::new(
+            &mut rng,
+            election.g1,
+            election.g2,
+            *ballot_id,
+            yes_candidate,
+            no_candidates,
+        )
+        .unwrap();
         audited.insert(*ballot_id, ballot);
     }
 
     // Verify the election.
-    let results = ElectionResults {
-        election,
-        audited,
-        confirmed,
-        totals,
-    };
-    assert!(results.verify().is_ok());
+    assert!(dre_ip::verify_election(election.g1, election.g2, &confirmed, &totals).is_ok());
+    for (id, ballot) in audited.iter() {
+        assert!(ballot.verify(election.g1, election.g2, id).is_ok());
+    }
+    println!("Election successfully verified.");
 
     // Announce the results.
     println!("Results:");
-    for (candidate, candidate_totals) in results.totals.iter() {
+    for (candidate, candidate_totals) in totals.iter() {
         println!(
             "{}: {} votes",
             candidate,
             scalar_to_u64(&candidate_totals.tally).unwrap()
         );
     }
-
-    // Dump it to a file.
-    let mut output = BufWriter::new(File::create("election.json").unwrap());
-    serde_json::to_writer_pretty(&mut output, &results).unwrap();
 }
 
 fn scalar_to_u64<S: Serializable>(scalar: &S) -> Option<u64> {
@@ -108,9 +112,7 @@ fn scalar_to_u64<S: Serializable>(scalar: &S) -> Option<u64> {
 
     let mut u64_bytes = [0; SIZE];
     let start = SIZE - bytes.len();
-    for i in start..SIZE {
-        u64_bytes[i] = bytes[i - start];
-    }
+    u64_bytes[start..SIZE].clone_from_slice(&bytes[..(SIZE - start)]);
 
     Some(u64::from_be_bytes(u64_bytes))
 }
