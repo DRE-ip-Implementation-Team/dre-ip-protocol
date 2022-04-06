@@ -6,7 +6,7 @@ pub mod pwf;
 pub use crate::ballots::{
     Ballot, BallotError, NoSecrets, VerificationError, Vote, VoteError, VoteSecrets,
 };
-pub use crate::election::{CandidateTotals, Election, ElectionResults, PrivateKey};
+pub use crate::election::{CandidateTotals, Election, ElectionResults};
 pub use crate::group::{
     DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, DreipScalar, Serializable,
 };
@@ -24,7 +24,7 @@ mod tests {
     #[test]
     fn test_vote() {
         let mut rng = rand::thread_rng();
-        let election = Election::<NistP256, _>::new(&[b"Test Election"], &mut rng);
+        let election = Election::<NistP256>::new(&[b"Test Election"], &mut rng);
 
         let vote1 = election.create_vote(&mut rng, "1", "Alice", true);
         assert!(vote1.verify(election.g1, election.g2, "1", "Alice").is_ok());
@@ -50,7 +50,7 @@ mod tests {
     #[test]
     fn test_ballot() {
         let mut rng = rand::thread_rng();
-        let election = Election::<NistP256, _>::new(&[b"Woah some random bytes"], &mut rng);
+        let election = Election::<NistP256>::new(&[b"Woah some random bytes"], &mut rng);
 
         let mut ballot = election
             .create_ballot(&mut rng, "1", "Alice", vec!["Bob", "Eve"])
@@ -72,7 +72,7 @@ mod tests {
     #[test]
     fn test_election() {
         let mut rng = rand::thread_rng();
-        let election = Election::<NistP256, _>::new(&[b"foobaraboof"], &mut rng);
+        let election = Election::<NistP256>::new(&[b"foobaraboof"], &mut rng);
         let mut ballots = HashMap::new();
 
         ballots.insert(

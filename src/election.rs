@@ -2,7 +2,6 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::ops::Deref;
 
 use crate::ballots::{Ballot, NoSecrets, VerificationError, Vote, VoteSecrets};
 use crate::group::{DreipGroup, DreipPoint, DreipScalar};
@@ -10,8 +9,8 @@ use crate::pwf::{BallotProof, VoteProof};
 
 /// An election using the given group.
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-#[serde(bound(serialize = "S: Serialize", deserialize = "for<'a> S: Deserialize<'a>"))]
-pub struct Election<G: DreipGroup, S> {
+#[serde(bound = "")]
+pub struct Election<G: DreipGroup> {
     /// First generator.
     #[serde(with = "crate::group::serde_bytestring")]
     pub g1: G::Point,
@@ -21,29 +20,15 @@ pub struct Election<G: DreipGroup, S> {
     pub g2: G::Point,
 
     /// Signing key.
-    #[serde(flatten)]
-    pub private_key: S,
+    #[serde(with = "crate::group::serde_bytestring")]
+    pub private_key: G::PrivateKey,
 
     /// Verification key.
     #[serde(with = "crate::group::serde_bytestring")]
     pub public_key: G::PublicKey,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct PrivateKey<G: DreipGroup> {
-    #[serde(with = "crate::group::serde_bytestring")]
-    pub private_key: G::PrivateKey,
-}
-
-impl<G: DreipGroup> Deref for PrivateKey<G> {
-    type Target = G::PrivateKey;
-
-    fn deref(&self) -> &Self::Target {
-        &self.private_key
-    }
-}
-
-impl<G: DreipGroup> Election<G, PrivateKey<G>> {
+impl<G: DreipGroup> Election<G> {
     /// Create a new election with random generators and keys.
     pub fn new(unique_bytes: &[&[u8]], rng: impl RngCore + CryptoRng) -> Self {
         let (g1, g2) = G::new_generators(unique_bytes);
@@ -54,13 +39,13 @@ impl<G: DreipGroup> Election<G, PrivateKey<G>> {
         Self {
             g1,
             g2,
-            private_key: PrivateKey { private_key },
+            private_key,
             public_key,
         }
     }
 }
 
-impl<G: DreipGroup, PK> Election<G, PK> {
+impl<G: DreipGroup> Election<G> {
     /// Create a new ballot, representing a yes vote for the given candidate, and a no vote for all
     /// the other given candidates.
     /// This will fail if any candidate IDs are duplicates.
@@ -180,16 +165,6 @@ impl<G: DreipGroup, PK> Election<G, PK> {
 
         Ok(())
     }
-
-    /// Erase the private key, for user-facing output.
-    pub fn erase_secrets(self) -> Election<G, NoSecrets> {
-        Election {
-            g1: self.g1,
-            g2: self.g2,
-            private_key: NoSecrets(()),
-            public_key: self.public_key,
-        }
-    }
 }
 
 /// Invert the given option, returning `Some(())` if it is `None`, and `None` if it is `Some(_)`.
@@ -239,7 +214,7 @@ where
     G: DreipGroup,
 {
     /// The election metadata.
-    pub election: Election<G, NoSecrets>,
+    pub election: Election<G>,
 
     /// All audited ballots.
     pub audited: HashMap<B, Ballot<C, G, VoteSecrets<G>>>,
