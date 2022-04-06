@@ -1,9 +1,10 @@
+use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 
 use crate::election::CandidateTotals;
-use crate::group::{DreipGroup, DreipPoint, Serializable};
+use crate::group::{DreipGroup, DreipPoint, DreipScalar, Serializable};
 use crate::pwf::{BallotProof, VoteProof};
 
 /// An error due to a vote failing verification.
@@ -127,6 +128,39 @@ where
 }
 
 impl<G: DreipGroup> Vote<G, VoteSecrets<G>> {
+    /// Create a new vote.
+    #[allow(non_snake_case)]
+    pub fn new(
+        mut rng: impl RngCore + CryptoRng,
+        g1: G::Point,
+        g2: G::Point,
+        ballot_id: impl AsRef<[u8]>,
+        candidate: impl AsRef<[u8]>,
+        yes: bool,
+    ) -> Self {
+        // Choose secret random r.
+        let r = G::Scalar::random(&mut rng);
+        // Select secret vote v.
+        let v = if yes {
+            G::Scalar::one()
+        } else {
+            G::Scalar::zero()
+        };
+        // Calculate public random R.
+        let R = g2 * r;
+        // Calculate public vote Z.
+        let Z = g1 * (r + v);
+        // Create PWF.
+        let pwf = VoteProof::new(rng, g1, g2, yes, r, Z, R, ballot_id, candidate);
+
+        Self {
+            secrets: VoteSecrets { r, v },
+            R,
+            Z,
+            pwf,
+        }
+    }
+
     /// Confirm this vote, discarding `r` and `v`.
     pub fn confirm(self) -> Vote<G, NoSecrets> {
         Vote {
@@ -223,6 +257,45 @@ where
     G: DreipGroup,
     G::Scalar: Eq,
 {
+    /// Create a new ballot. This will fail if any candidate IDs are duplicates.
+    pub fn new<B>(
+        mut rng: impl RngCore + CryptoRng,
+        g1: G::Point,
+        g2: G::Point,
+        ballot_id: B,
+        yes_candidate: C,
+        no_candidates: impl IntoIterator<Item = C>,
+    ) -> Option<Self>
+    where
+        B: AsRef<[u8]>,
+        C: AsRef<[u8]>,
+    {
+        let no_candidates = no_candidates.into_iter();
+
+        let mut votes = if let (_, Some(len)) = no_candidates.size_hint() {
+            HashMap::with_capacity(len)
+        } else {
+            HashMap::new()
+        };
+
+        // Create yes vote.
+        let yes_vote = Vote::new(&mut rng, g1, g2, &ballot_id, &yes_candidate, true);
+        ensure_none(votes.insert(yes_candidate, yes_vote))?;
+        // Create no votes.
+        for candidate in no_candidates {
+            let no_vote = Vote::new(&mut rng, g1, g2, &ballot_id, &candidate, false);
+            ensure_none(votes.insert(candidate, no_vote))?;
+        }
+        // Create PWF.
+        let r_sum: G::Scalar = votes
+            .values()
+            .map(|vote| vote.secrets.r)
+            .fold(G::Scalar::zero(), |a, b| a + b);
+        let pwf = BallotProof::new(rng, g1, g2, r_sum, &ballot_id);
+
+        Some(Self { votes, pwf })
+    }
+
     /// Confirm this ballot, discarding all `r` and `v` values.
     /// If `totals` is provided, the candidate totals will be appropriately
     /// incremented before discarding the values. If provided, `totals` must
@@ -251,5 +324,14 @@ where
             votes,
             pwf: self.pwf,
         }
+    }
+}
+
+/// Invert the given option, returning `Some(())` if it is `None`, and `None` if it is `Some(_)`.
+fn ensure_none<T>(option: Option<T>) -> Option<()> {
+    if option.is_none() {
+        Some(())
+    } else {
+        None
     }
 }

@@ -5,12 +5,6 @@ authors = ["Chris Riches"]
 edition = "2021"
 description = "An implementation of the DRE-ip voting protocol as per the paper by Shahandashti and Hao."
 
-# VERIFICATION BINARY
-[[bin]]
-name = "verify-election"
-path = "src/bin/verify.rs"
-required-features = ["verification"]
-
 # EXAMPLES
 [[example]]
 name = "run-election"
@@ -21,17 +15,10 @@ required-features = ["serde_json"]
 [features]
 default = ["p256_impl"]
 p256_impl = ["sha2", "p256"]
-verification = ["clap", "serde_json"]
 
 # DEPENDENCIES
 [dependencies.base64]
 version = "0.13.0"
-
-[dependencies.clap]
-version = "3.0.10"
-optional = true
-default_features = false
-features = ["derive", "std"]
 
 [dependencies.p256]
 version = "0.10.1"

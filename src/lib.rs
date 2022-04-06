@@ -6,7 +6,7 @@ pub mod pwf;
 pub use crate::ballots::{
     Ballot, BallotError, NoSecrets, VerificationError, Vote, VoteError, VoteSecrets,
 };
-pub use crate::election::{CandidateTotals, Election, ElectionResults};
+pub use crate::election::{verify_election, CandidateTotals, Election};
 pub use crate::group::{
     DreipGroup, DreipPoint, DreipPrivateKey, DreipPublicKey, DreipScalar, Serializable,
 };
@@ -26,10 +26,11 @@ mod tests {
         let mut rng = rand::thread_rng();
         let election = Election::<NistP256>::new(&[b"Test Election"], &mut rng);
 
-        let vote1 = election.create_vote(&mut rng, "1", "Alice", true);
+        let vote1 =
+            Vote::<NistP256, _>::new(&mut rng, election.g1, election.g2, "1", "Alice", true);
         assert!(vote1.verify(election.g1, election.g2, "1", "Alice").is_ok());
 
-        let vote2 = election.create_vote(&mut rng, "1", "Bob", false);
+        let vote2 = Vote::<NistP256, _>::new(&mut rng, election.g1, election.g2, "1", "Bob", false);
         assert!(vote2.verify(election.g1, election.g2, "1", "Bob").is_ok());
 
         assert_ne!(vote1.pwf, vote2.pwf);
@@ -52,9 +53,15 @@ mod tests {
         let mut rng = rand::thread_rng();
         let election = Election::<NistP256>::new(&[b"Woah some random bytes"], &mut rng);
 
-        let mut ballot = election
-            .create_ballot(&mut rng, "1", "Alice", vec!["Bob", "Eve"])
-            .unwrap();
+        let mut ballot = Ballot::<_, NistP256, _>::new(
+            &mut rng,
+            election.g1,
+            election.g2,
+            "1",
+            "Alice",
+            vec!["Bob", "Eve"],
+        )
+        .unwrap();
         assert!(ballot.verify(election.g1, election.g2, "1").is_ok());
         match ballot.verify(election.g1, election.g2, "2") {
             Err(BallotError::Vote(_)) => {}
@@ -73,51 +80,69 @@ mod tests {
     fn test_election() {
         let mut rng = rand::thread_rng();
         let election = Election::<NistP256>::new(&[b"foobaraboof"], &mut rng);
-        let mut ballots = HashMap::new();
+        let mut ballots: HashMap<_, Ballot<_, NistP256, _>> = HashMap::new();
 
         ballots.insert(
             "1",
-            election
-                .create_ballot(&mut rng, "1", "Alice", vec!["Bob", "Eve"])
-                .unwrap(),
+            Ballot::new(
+                &mut rng,
+                election.g1,
+                election.g2,
+                "1",
+                "Alice",
+                vec!["Bob", "Eve"],
+            )
+            .unwrap(),
         );
         ballots.insert(
             "2",
-            election
-                .create_ballot(&mut rng, "2", "Bob", vec!["Alice", "Eve"])
-                .unwrap(),
+            Ballot::new(
+                &mut rng,
+                election.g1,
+                election.g2,
+                "2",
+                "Bob",
+                vec!["Alice", "Eve"],
+            )
+            .unwrap(),
         );
         ballots.insert(
             "3",
-            election
-                .create_ballot(&mut rng, "3", "Alice", vec!["Bob", "Eve"])
-                .unwrap(),
+            Ballot::new(
+                &mut rng,
+                election.g1,
+                election.g2,
+                "3",
+                "Alice",
+                vec!["Bob", "Eve"],
+            )
+            .unwrap(),
         );
 
         let alice_r_sum = ballots
             .values()
             .map(|b| b.votes.iter().find(|(c, _)| **c == "Alice").unwrap())
-            .fold(Scalar::zero(), |a, (_, b)| &a + &b.secrets.r);
+            .fold(Scalar::zero(), |a, (_, b)| a + b.secrets.r);
         let bob_r_sum = ballots
             .values()
             .map(|b| b.votes.iter().find(|(c, _)| **c == "Bob").unwrap())
-            .fold(Scalar::zero(), |a, (_, b)| &a + &b.secrets.r);
+            .fold(Scalar::zero(), |a, (_, b)| a + b.secrets.r);
         let eve_r_sum = ballots
             .values()
             .map(|b| b.votes.iter().find(|(c, _)| **c == "Eve").unwrap())
-            .fold(Scalar::zero(), |a, (_, b)| &a + &b.secrets.r);
+            .fold(Scalar::zero(), |a, (_, b)| a + b.secrets.r);
 
         let mut totals = HashMap::new();
         totals.insert("Alice", (Scalar::from(2), alice_r_sum).into());
         totals.insert("Bob", (Scalar::from(1), bob_r_sum).into());
         totals.insert("Eve", (Scalar::from(0), eve_r_sum).into());
 
-        assert!(election.verify(&ballots, &totals).is_ok());
+        assert!(verify_election(election.g1, election.g2, &ballots, &totals).is_ok());
 
         // Now change the tally and check it fails.
         totals.get_mut("Eve").unwrap().tally = Scalar::from(5);
         assert_eq!(
-            election.verify(&ballots, &totals),
+            verify_election(election.g1, election.g2, &ballots, &totals),
             Err(VerificationError::Tally {
                 candidate_id: "Eve"
             })
@@ -127,7 +152,7 @@ mod tests {
         totals.get_mut("Eve").unwrap().tally = Scalar::from(0);
         totals.get_mut("Alice").unwrap().r_sum = Scalar::random(&mut rng);
         assert_eq!(
-            election.verify(&ballots, &totals),
+            verify_election(election.g1, election.g2, &ballots, &totals),
             Err(VerificationError::Tally {
                 candidate_id: "Alice"
             })
@@ -137,7 +162,7 @@ mod tests {
         totals.get_mut("Alice").unwrap().r_sum = alice_r_sum;
         totals.remove("Bob").unwrap();
         assert_eq!(
-            election.verify(&ballots, &totals),
+            verify_election(election.g1, election.g2, &ballots, &totals),
             Err(VerificationError::WrongCandidates)
         );
 
@@ -151,7 +176,7 @@ mod tests {
             .unwrap()
             .R = DreipPoint::identity();
         assert_eq!(
-            election.verify(&ballots, &totals),
+            verify_election(election.g1, election.g2, &ballots, &totals),
             Err(VerificationError::Ballot(BallotError::Vote(VoteError {
                 ballot_id: "1",
                 candidate_id: "Alice",
