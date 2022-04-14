@@ -35,10 +35,16 @@ pub enum VerificationError<B, C> {
     WrongCandidates,
 }
 
+pub trait VoteSecrets<G: DreipGroup> {
+    /// Verify the secrets against the actual `R` and `Z` values.
+    #[allow(non_snake_case)]
+    fn verify(&self, g1: G::Point, g2: G::Point, R: G::Point, Z: G::Point) -> Option<()>;
+}
+
 /// Vote secrets are the `r` and `v` values.
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(bound = "")]
-pub struct VoteSecrets<G: DreipGroup> {
+pub struct SecretsPresent<G: DreipGroup> {
     /// The secret random value.
     #[serde(with = "crate::group::serde_bytestring")]
     pub r: G::Scalar,
@@ -48,8 +54,22 @@ pub struct VoteSecrets<G: DreipGroup> {
     pub v: G::Scalar,
 }
 
-impl<'a, G: DreipGroup> From<&'a VoteSecrets<G>> for Vec<u8> {
-    fn from(secrets: &'a VoteSecrets<G>) -> Self {
+impl<G: DreipGroup> VoteSecrets<G> for SecretsPresent<G> {
+    #[allow(non_snake_case)]
+    fn verify(&self, g1: G::Point, g2: G::Point, R: G::Point, Z: G::Point) -> Option<()> {
+        // Check that R and Z are correctly calculated from r and v.
+        let correct_Z = g1 * (self.r + self.v);
+        let correct_R = g2 * self.r;
+        if correct_Z == Z && correct_R == R {
+            Some(())
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, G: DreipGroup> From<&'a SecretsPresent<G>> for Vec<u8> {
+    fn from(secrets: &'a SecretsPresent<G>) -> Self {
         let mut bytes = Vec::new();
         bytes.extend(secrets.r.to_bytes());
         bytes.extend(secrets.v.to_bytes());
@@ -59,8 +79,19 @@ impl<'a, G: DreipGroup> From<&'a VoteSecrets<G>> for Vec<u8> {
 }
 
 /// No secrets present.
+///
+/// Note: this is deliberately not defined as a unit struct. Unit structs get
+/// serialized to null, while a flattened, wrapped, skipped unit gets ignored entirely.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct NoSecrets(#[serde(skip)] pub ());
+
+impl<G: DreipGroup> VoteSecrets<G> for NoSecrets {
+    #[allow(non_snake_case)]
+    fn verify(&self, _g1: G::Point, _g2: G::Point, _R: G::Point, _Z: G::Point) -> Option<()> {
+        // Nothing to verify.
+        Some(())
+    }
+}
 
 impl<'a> From<&'a NoSecrets> for Vec<u8> {
     fn from(_: &'a NoSecrets) -> Self {
@@ -89,8 +120,12 @@ pub struct Vote<G: DreipGroup, S> {
     pub pwf: VoteProof<G>,
 }
 
-impl<G: DreipGroup, S> Vote<G, S> {
-    /// Verify the PWF of this vote.
+impl<G, S> Vote<G, S>
+where
+    G: DreipGroup,
+    S: VoteSecrets<G>,
+{
+    /// Verify this vote.
     pub fn verify<B, C>(
         &self,
         g1: G::Point,
@@ -102,12 +137,27 @@ impl<G: DreipGroup, S> Vote<G, S> {
         B: AsRef<[u8]>,
         C: AsRef<[u8]>,
     {
-        self.pwf
-            .verify(g1, g2, self.Z, self.R, &ballot_id, &candidate_id)
-            .ok_or(VoteError {
+        // Verify the secrets (if present).
+        if self.secrets.verify(g1, g2, self.R, self.Z).is_none() {
+            return Err(VoteError {
                 ballot_id,
                 candidate_id,
-            })
+            });
+        }
+
+        // Verify the PWF.
+        if self
+            .pwf
+            .verify(g1, g2, self.Z, self.R, &ballot_id, &candidate_id)
+            .is_none()
+        {
+            return Err(VoteError {
+                ballot_id,
+                candidate_id,
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -127,7 +177,7 @@ where
     }
 }
 
-impl<G: DreipGroup> Vote<G, VoteSecrets<G>> {
+impl<G: DreipGroup> Vote<G, SecretsPresent<G>> {
     /// Create a new vote.
     #[allow(non_snake_case)]
     pub fn new(
@@ -154,7 +204,7 @@ impl<G: DreipGroup> Vote<G, VoteSecrets<G>> {
         let pwf = VoteProof::new(rng, g1, g2, yes, r, Z, R, ballot_id, candidate);
 
         Self {
-            secrets: VoteSecrets { r, v },
+            secrets: SecretsPresent { r, v },
             R,
             Z,
             pwf,
@@ -216,8 +266,9 @@ impl<C, G, S> Ballot<C, G, S>
 where
     C: Hash + Eq + Clone + AsRef<[u8]>,
     G: DreipGroup,
+    S: VoteSecrets<G>,
 {
-    /// Verify all PWFs within this ballot.
+    /// Verify this ballot and all votes within it.
     #[allow(non_snake_case)]
     pub fn verify<B>(
         &self,
@@ -251,7 +302,7 @@ where
     }
 }
 
-impl<C, G> Ballot<C, G, VoteSecrets<G>>
+impl<C, G> Ballot<C, G, SecretsPresent<G>>
 where
     C: Hash + Eq + Clone,
     G: DreipGroup,

@@ -4,7 +4,7 @@ pub mod group;
 pub mod pwf;
 
 pub use crate::ballots::{
-    Ballot, BallotError, NoSecrets, VerificationError, Vote, VoteError, VoteSecrets,
+    Ballot, BallotError, NoSecrets, SecretsPresent, VerificationError, Vote, VoteError, VoteSecrets,
 };
 pub use crate::election::{verify_election, CandidateTotals, Election};
 pub use crate::group::{

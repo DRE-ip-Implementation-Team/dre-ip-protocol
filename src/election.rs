@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use crate::ballots::{Ballot, VerificationError};
+use crate::ballots::{Ballot, VerificationError, VoteSecrets};
 use crate::group::{DreipGroup, DreipPoint, DreipScalar};
 
 /// An election using the given group.
@@ -86,6 +86,7 @@ where
     G: DreipGroup,
     B: AsRef<[u8]> + Clone,
     C: AsRef<[u8]> + Eq + Hash + Clone + Ord,
+    S: VoteSecrets<G>,
 {
     // Verify individual ballots.
     for (ballot_id, ballot) in ballots.iter() {
