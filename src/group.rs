@@ -35,6 +35,18 @@ pub trait Serializable {
     }
 }
 
+/// Trivial implementation of `Serializable` for `Vec<u8>`, primarily to let
+/// us use `serde_bytestring` on it.
+impl Serializable for Vec<u8> {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.clone()
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+        Some(bytes.to_vec())
+    }
+}
+
 /// Serde (de)serialization to/from bytestrings on types that implement Serializable.
 /// Use by putting the attribute `#[serde(with = "crate::group::serde_bytestring")]`
 /// on your field.
