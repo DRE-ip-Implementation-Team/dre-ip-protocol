@@ -6,6 +6,7 @@ edition = "2021"
 description = "An implementation of the DRE-ip voting protocol as per the paper by Shahandashti and Hao."
 readme = "README.md"
 repository = "https://github.com/DRE-ip-Implementation-Team/dre-ip-protocol"
+license = "MIT OR Apache-2.0"
 
 # EXAMPLES
 [[example]]
