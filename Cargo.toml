@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Chris Riches"]
 edition = "2021"
 description = "An implementation of the DRE-ip voting protocol as per the paper by Shahandashti and Hao."
+readme = "README.md"
+repository = "https://github.com/DRE-ip-Implementation-Team/dre-ip-protocol"
 
 # EXAMPLES
 [[example]]
@@ -21,21 +23,21 @@ p256_impl = ["sha2", "p256"]
 version = "0.13.0"
 
 [dependencies.p256]
-version = "0.10.1"
-optional = true
-features = ["arithmetic", "ecdsa-core", "ecdsa", "hash2curve"]
+version = "0.11.1"
+optional = true # Required for P-256 implementation
+features = ["arithmetic", "hash2curve"]
 
 [dependencies.rand]
-version = "0.8.4"
+version = "0.8.5"
 
 [dependencies.serde]
-version = "1.0.117"
+version = "1.0.144"
 features = ["derive"]
 
 [dependencies.serde_json]
-version = "1.0.59"
-optional = true
+version = "1.0.85"
+optional = true # Required for examples
 
 [dependencies.sha2]
-version = "0.9.9"  # Must be compatible with the version used internally by p256.
-optional = true
+version = "0.10.2"  # Must be compatible with the version used internally by p256.
+optional = true # Required for P-256 implementation

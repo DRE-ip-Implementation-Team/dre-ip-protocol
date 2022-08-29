@@ -2,8 +2,7 @@ use super::*;
 
 use p256::ecdsa::signature::{Signature as SignatureTrait, Signer, Verifier};
 use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
-use p256::elliptic_curve::hash2curve::GroupDigest;
-use p256::elliptic_curve::hash2field::ExpandMsgXmd;
+use p256::elliptic_curve::hash2curve::{ExpandMsgXmd, GroupDigest};
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use p256::elliptic_curve::{Field, PrimeField};
 use p256::{EncodedPoint, FieldBytes, NistP256, ProjectivePoint, Scalar};
