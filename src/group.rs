@@ -42,7 +42,10 @@ impl Serializable for Vec<u8> {
         self.clone()
     }
 
-    fn from_bytes(bytes: &[u8]) -> Option<Self> where Self: Sized {
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized,
+    {
         Some(bytes.to_vec())
     }
 }
