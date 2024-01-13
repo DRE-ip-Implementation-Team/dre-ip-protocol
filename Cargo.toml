@@ -14,6 +14,10 @@ name = "run-election"
 path = "examples/run_election.rs"
 required-features = ["serde_json"]
 
+[[example]]
+name = "benchmark"
+path = "examples/benchmark.rs"
+
 # FEATURES
 [features]
 default = ["p256_impl"]

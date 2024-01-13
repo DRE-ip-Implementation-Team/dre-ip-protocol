@@ -2,6 +2,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::{Duration, Instant};
 
 use crate::ballots::{Ballot, VerificationError, VoteSecrets};
 use crate::group::{DreipGroup, DreipPoint, DreipScalar};
@@ -81,7 +82,7 @@ pub fn verify_election<G, B, C, S>(
     g2: G::Point,
     ballots: &HashMap<B, Ballot<C, G, S>>,
     totals: &HashMap<C, CandidateTotals<G>>,
-) -> Result<(), VerificationError<B, C>>
+) -> Result<(Duration, Duration, Duration), VerificationError<B, C>>
 where
     G: DreipGroup,
     B: AsRef<[u8]> + Clone,
@@ -89,13 +90,19 @@ where
     S: VoteSecrets<G>,
 {
     // Verify individual ballots.
+    let mut vote_dur = Duration::ZERO;
+    let mut pwf_dur = Duration::ZERO;
+
     for (ballot_id, ballot) in ballots.iter() {
-        ballot
+        let (vd, pd) = ballot
             .verify(g1, g2, ballot_id.clone())
             .map_err(|e| VerificationError::Ballot(e))?;
+        vote_dur += vd;
+        pwf_dur += pd;
     }
 
     // Calculate true totals.
+    let start = Instant::now();
     let mut true_totals = HashMap::with_capacity(totals.len());
     for ballot in ballots.values() {
         for (candidate_id, vote) in ballot.votes.iter() {
@@ -119,6 +126,7 @@ where
             });
         }
     }
+    let tally_dur = start.elapsed();
 
-    Ok(())
+    Ok((vote_dur, pwf_dur, tally_dur))
 }

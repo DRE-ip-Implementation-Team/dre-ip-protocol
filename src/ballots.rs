@@ -2,6 +2,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::{Duration, Instant};
 
 use crate::election::CandidateTotals;
 use crate::group::{DreipGroup, DreipPoint, DreipScalar, Serializable};
@@ -132,11 +133,13 @@ where
         g2: G::Point,
         ballot_id: B,
         candidate_id: C,
-    ) -> Result<(), VoteError<B, C>>
+    ) -> Result<Duration, VoteError<B, C>>
     where
         B: AsRef<[u8]>,
         C: AsRef<[u8]>,
     {
+        let start = Instant::now();
+
         // Verify the secrets (if present).
         if self.secrets.verify(g1, g2, self.R, self.Z).is_none() {
             return Err(VoteError {
@@ -157,7 +160,7 @@ where
             });
         }
 
-        Ok(())
+        Ok(start.elapsed())
     }
 }
 
@@ -187,7 +190,9 @@ impl<G: DreipGroup> Vote<G, SecretsPresent<G>> {
         ballot_id: impl AsRef<[u8]>,
         candidate: impl AsRef<[u8]>,
         yes: bool,
-    ) -> Self {
+    ) -> (Self, Duration, Duration) {
+        let start = Instant::now();
+
         // Choose secret random r.
         let r = G::Scalar::random(&mut rng);
         // Select secret vote v.
@@ -200,15 +205,21 @@ impl<G: DreipGroup> Vote<G, SecretsPresent<G>> {
         let R = g2 * r;
         // Calculate public vote Z.
         let Z = g1 * (r + v);
-        // Create PWF.
-        let pwf = VoteProof::new(rng, g1, g2, yes, r, Z, R, ballot_id, candidate);
+        let vote_dur = start.elapsed();
 
-        Self {
+        // Create PWF.
+        let start = Instant::now();
+        let pwf = VoteProof::new(rng, g1, g2, yes, r, Z, R, ballot_id, candidate);
+        let pwf_dur = start.elapsed();
+
+        let vote = Self {
             secrets: SecretsPresent { r, v },
             R,
             Z,
             pwf,
-        }
+        };
+
+        (vote, vote_dur, pwf_dur)
     }
 
     /// Confirm this vote, discarding `r` and `v`.
@@ -275,17 +286,21 @@ where
         g1: G::Point,
         g2: G::Point,
         ballot_id: B,
-    ) -> Result<(), BallotError<B, C>>
+    ) -> Result<(Duration, Duration), BallotError<B, C>>
     where
         B: AsRef<[u8]> + Clone,
     {
+        let mut vote_dur = Duration::ZERO;
+
         // Verify individual vote proofs.
         for (candidate, vote) in self.votes.iter() {
-            vote.verify(g1, g2, ballot_id.clone(), candidate.clone())
+            vote_dur += vote.verify(g1, g2, ballot_id.clone(), candidate.clone())
                 .map_err(|e| BallotError::Vote(e))?;
         }
 
         // Verify the ballot proof.
+        let start = Instant::now();
+
         let Z_sum: G::Point = self
             .votes
             .values()
@@ -298,7 +313,10 @@ where
             .fold(G::Point::identity(), |a, b| a + b);
         self.pwf
             .verify(g1, g2, Z_sum, R_sum, &ballot_id)
-            .ok_or(BallotError::BallotProof { ballot_id })
+            .ok_or(BallotError::BallotProof { ballot_id })?;
+
+        let pwf_dur = start.elapsed();
+        Ok((vote_dur, pwf_dur))
     }
 }
 
@@ -316,7 +334,7 @@ where
         ballot_id: B,
         yes_candidate: C,
         no_candidates: impl IntoIterator<Item = C>,
-    ) -> Option<Self>
+    ) -> Option<(Self, Duration, Duration, Duration)>
     where
         B: AsRef<[u8]>,
         C: AsRef<[u8]>,
@@ -329,22 +347,32 @@ where
             HashMap::new()
         };
 
+        let mut vote_dur = Duration::ZERO;
+        let mut vote_pwf_dur = Duration::ZERO;
+
         // Create yes vote.
-        let yes_vote = Vote::new(&mut rng, g1, g2, &ballot_id, &yes_candidate, true);
+        let (yes_vote, vd, pd) = Vote::new(&mut rng, g1, g2, &ballot_id, &yes_candidate, true);
+        vote_dur += vd;
+        vote_pwf_dur += pd;
         ensure_none(votes.insert(yes_candidate, yes_vote))?;
         // Create no votes.
         for candidate in no_candidates {
-            let no_vote = Vote::new(&mut rng, g1, g2, &ballot_id, &candidate, false);
+            let (no_vote, vd, pd) = Vote::new(&mut rng, g1, g2, &ballot_id, &candidate, false);
+            vote_dur += vd;
+            vote_pwf_dur += pd;
             ensure_none(votes.insert(candidate, no_vote))?;
         }
+
         // Create PWF.
+        let start = Instant::now();
         let r_sum: G::Scalar = votes
             .values()
             .map(|vote| vote.secrets.r)
             .fold(G::Scalar::zero(), |a, b| a + b);
         let pwf = BallotProof::new(rng, g1, g2, r_sum, &ballot_id);
+        let ballot_pwf_dur = start.elapsed();
 
-        Some(Self { votes, pwf })
+        Some((Self { votes, pwf }, vote_dur, vote_pwf_dur, ballot_pwf_dur))
     }
 
     /// Confirm this ballot, discarding all `r` and `v` values.
